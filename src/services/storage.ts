@@ -38,13 +38,14 @@ export const storageService = {
     return {
       url: demoUrl,
       key,
-      bucket: process.env.R2_BUCKET_NAME || 'localdrivers-media-prod',
+      bucket: process.env.R2_BUCKET_NAME || 'freepo-images',
       uploadedAt: new Date().toISOString(),
     };
   },
 
-  // Generates placeholder R2 URL for documentation
+  // Generates public R2 URL for documents & photos
   getStorageUrl(key: string): string {
-    return `https://r2.localdrivers.in/${key}`;
+    const publicUrl = process.env.VITE_R2_PUBLIC_URL || 'https://pub-6a3dc798d365491ab799eb3f5e146591.r2.dev';
+    return `${publicUrl}/${key}`;
   }
 };
