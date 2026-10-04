@@ -50,10 +50,10 @@ export const AdminSettingsPage: React.FC = () => {
           </div>
 
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs font-mono space-y-1 text-slate-700">
-            <div>R2_BUCKET_NAME: freepo-images</div>
+            <div>R2_BUCKET_NAME: localdrivers</div>
             <div>R2_ACCOUNT_ID: 3b25d6fc00d328f896be8a3382324774</div>
-            <div>PUBLIC_DEV_URL: https://pub-6a3dc798d365491ab799eb3f5e146591.r2.dev</div>
-            <div>S3_API_ENDPOINT: https://3b25d6fc00d328f896be8a3382324774.r2.cloudflarestorage.com/freepo-images</div>
+            <div>PUBLIC_DEV_URL: https://pub-e6716545434140d796808e125fc8dc7d.r2.dev</div>
+            <div>S3_API_ENDPOINT: https://3b25d6fc00d328f896be8a3382324774.r2.cloudflarestorage.com/localdrivers</div>
             <div>LOCATION: Asia-Pacific (APAC)</div>
             <div>STATUS: Connected & Active</div>
           </div>

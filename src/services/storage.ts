@@ -38,14 +38,14 @@ export const storageService = {
     return {
       url: demoUrl,
       key,
-      bucket: process.env.R2_BUCKET_NAME || 'freepo-images',
+      bucket: process.env.R2_BUCKET_NAME || 'localdrivers',
       uploadedAt: new Date().toISOString(),
     };
   },
 
   // Generates public R2 URL for documents & photos
   getStorageUrl(key: string): string {
-    const publicUrl = process.env.VITE_R2_PUBLIC_URL || 'https://pub-6a3dc798d365491ab799eb3f5e146591.r2.dev';
+    const publicUrl = process.env.VITE_R2_PUBLIC_URL || 'https://pub-e6716545434140d796808e125fc8dc7d.r2.dev';
     return `${publicUrl}/${key}`;
   }
 };
