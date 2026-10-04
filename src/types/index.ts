@@ -12,9 +12,10 @@ export type BookingStatus = 'Pending' | 'Accepted' | 'Driver Arriving' | 'Comple
 
 export interface DocumentItem {
   id: string;
-  type: 'Driving Licence' | 'Identity Proof' | 'Police Verification';
-  status: 'Verified' | 'Under Review' | 'Not Uploaded';
+  type: 'Profile Photo Selfie' | 'Aadhaar Card' | 'Driving Licence' | 'Identity Proof' | 'Police Verification';
+  status: 'Verified' | 'Under Review' | 'Rejected' | 'Not Uploaded';
   url?: string;
+  rejectionReason?: string;
   uploadedAt?: string;
 }
 

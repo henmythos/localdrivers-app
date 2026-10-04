@@ -128,9 +128,9 @@ export const INITIAL_DRIVERS: Driver[] = [
     city: 'Hyderabad',
     verificationBadge: true,
     documents: [
-      { id: 'doc-1', type: 'Driving Licence', status: 'Verified', uploadedAt: '2024-01-15' },
-      { id: 'doc-2', type: 'Identity Proof', status: 'Verified', uploadedAt: '2024-01-15' },
-      { id: 'doc-3', type: 'Police Verification', status: 'Verified', uploadedAt: '2024-01-16' },
+      { id: 'doc-1', type: 'Profile Photo Selfie', status: 'Verified', url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=400', uploadedAt: '2024-01-15' },
+      { id: 'doc-2', type: 'Aadhaar Card', status: 'Verified', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=800', uploadedAt: '2024-01-15' },
+      { id: 'doc-3', type: 'Driving Licence', status: 'Verified', url: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&q=80&w=800', uploadedAt: '2024-01-16' },
     ],
     description: 'Punctual, non-smoker chauffeur with 8+ years of expertise in luxury cars and highway driving across Telangana and Andhra Pradesh.',
     joinedDate: '2024-01-15',
@@ -158,9 +158,9 @@ export const INITIAL_DRIVERS: Driver[] = [
     city: 'Hyderabad',
     verificationBadge: true,
     documents: [
-      { id: 'doc-4', type: 'Driving Licence', status: 'Verified', uploadedAt: '2023-11-10' },
-      { id: 'doc-5', type: 'Identity Proof', status: 'Verified', uploadedAt: '2023-11-10' },
-      { id: 'doc-6', type: 'Police Verification', status: 'Verified', uploadedAt: '2023-11-12' },
+      { id: 'doc-4', type: 'Profile Photo Selfie', status: 'Verified', url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=400', uploadedAt: '2023-11-10' },
+      { id: 'doc-5', type: 'Aadhaar Card', status: 'Verified', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=800', uploadedAt: '2023-11-10' },
+      { id: 'doc-6', type: 'Driving Licence', status: 'Verified', url: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&q=80&w=800', uploadedAt: '2023-11-12' },
     ],
     description: 'Specialist in outstation routes and VIP executive escort services. Known for defensive driving and high confidentiality.',
     joinedDate: '2023-11-10',
@@ -188,9 +188,9 @@ export const INITIAL_DRIVERS: Driver[] = [
     city: 'Hyderabad',
     verificationBadge: true,
     documents: [
-      { id: 'doc-7', type: 'Driving Licence', status: 'Verified', uploadedAt: '2023-08-01' },
-      { id: 'doc-8', type: 'Identity Proof', status: 'Verified', uploadedAt: '2023-08-01' },
-      { id: 'doc-9', type: 'Police Verification', status: 'Verified', uploadedAt: '2023-08-03' },
+      { id: 'doc-7', type: 'Profile Photo Selfie', status: 'Verified', url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=400', uploadedAt: '2023-08-01' },
+      { id: 'doc-8', type: 'Aadhaar Card', status: 'Verified', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=800', uploadedAt: '2023-08-01' },
+      { id: 'doc-9', type: 'Driving Licence', status: 'Verified', url: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&q=80&w=800', uploadedAt: '2023-08-03' },
     ],
     description: 'Former corporate fleet lead with 12 years experience. Specializes in luxury German cars (Mercedes, BMW, Audi) and VIP protocol.',
     joinedDate: '2023-08-01',
@@ -755,17 +755,24 @@ class DatabaseService {
     services: string[];
     vehicleCategories: string[];
     description?: string;
+    photoUrl?: string;
+    aadhaarUrl?: string;
+    licenseUrl?: string;
   }): Driver {
     const drivers = this.getDrivers();
     const cleanPhoneDigits = input.phone.replace(/\D/g, '');
     const newId = `drv-${Date.now()}`;
     const today = new Date().toISOString().split('T')[0];
 
+    const defaultSelfie = input.photoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400';
+    const defaultAadhaar = input.aadhaarUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=800';
+    const defaultDL = input.licenseUrl || 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&q=80&w=800';
+
     const newDriver: Driver = {
       id: newId,
       driverCode: generateDriverCode(),
       name: input.name,
-      photo: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400',
+      photo: defaultSelfie,
       phone: input.phone,
       email: input.email || `${cleanPhoneDigits}@localdrivers.in`,
       rating: 5.0,
@@ -784,9 +791,9 @@ class DatabaseService {
       city: input.city || 'Hyderabad',
       verificationBadge: false,
       documents: [
-        { id: `doc-${Date.now()}-1`, type: 'Driving Licence', status: 'Under Review', uploadedAt: today },
-        { id: `doc-${Date.now()}-2`, type: 'Identity Proof', status: 'Under Review', uploadedAt: today },
-        { id: `doc-${Date.now()}-3`, type: 'Police Verification', status: 'Under Review', uploadedAt: today },
+        { id: `doc-${Date.now()}-1`, type: 'Profile Photo Selfie', status: 'Under Review', url: defaultSelfie, uploadedAt: today },
+        { id: `doc-${Date.now()}-2`, type: 'Aadhaar Card', status: 'Under Review', url: defaultAadhaar, uploadedAt: today },
+        { id: `doc-${Date.now()}-3`, type: 'Driving Licence', status: 'Under Review', url: defaultDL, uploadedAt: today },
       ],
       description: input.description || 'Newly registered driver partner. Awaiting document verification by Admin.',
       joinedDate: today,

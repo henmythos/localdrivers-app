@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Phone, MapPin, Briefcase, Globe, Car, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
+import { User, Phone, MapPin, Briefcase, Globe, Car, ShieldCheck, CheckCircle2, ArrowRight, Camera, FileText, Lock, UploadCloud, Eye } from 'lucide-react';
 import { driversService } from '../../services/drivers';
 
 const AVAILABLE_SERVICES = [
@@ -32,9 +32,25 @@ export const DriverRegisterPage: React.FC = () => {
   const [selectedVehicles, setSelectedVehicles] = useState<string[]>(['Manual', 'Automatic']);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>(['Telugu', 'Hindi']);
 
+  // Document Uploads State
+  const [photoSelfieUrl, setPhotoSelfieUrl] = useState<string>('');
+  const [aadhaarUrl, setAadhaarUrl] = useState<string>('');
+  const [licenseUrl, setLicenseUrl] = useState<string>('');
+
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [submittedPhone, setSubmittedPhone] = useState('');
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, setUrl: (val: string) => void) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const toggleSelection = (list: string[], item: string, setList: (val: string[]) => void) => {
     if (list.includes(item)) {
@@ -61,6 +77,21 @@ export const DriverRegisterPage: React.FC = () => {
       return;
     }
 
+    if (!photoSelfieUrl) {
+      setError('Please upload your Profile Photo Selfie');
+      return;
+    }
+
+    if (!aadhaarUrl) {
+      setError('Please upload your Aadhaar Card document for Admin KYC verification');
+      return;
+    }
+
+    if (!licenseUrl) {
+      setError('Please upload your Driving Licence (DL) document for Admin verification');
+      return;
+    }
+
     driversService.registerDriver({
       name: formData.name.trim(),
       phone: formData.phone.trim(),
@@ -72,6 +103,9 @@ export const DriverRegisterPage: React.FC = () => {
       services: selectedServices,
       vehicleCategories: selectedVehicles,
       description: formData.description.trim() || 'Professional driver registered on Localdrivers platform.',
+      photoUrl: photoSelfieUrl,
+      aadhaarUrl: aadhaarUrl,
+      licenseUrl: licenseUrl,
     });
 
     setSubmittedPhone(formData.phone.trim());
@@ -333,7 +367,129 @@ export const DriverRegisterPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Section 5: Brief Profile Summary */}
+          {/* Section 5: Mandatory Document Uploads (KYC Verification) */}
+          <div className="space-y-4 pt-2 border-t border-slate-100">
+            <div>
+              <h2 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <FileText className="w-4 h-4 text-purple-600" />
+                Mandatory Document Verification (Cloudflare R2 Storage)
+              </h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Profile selfie is displayed on your driver card. Aadhaar and DL are stored securely in Cloudflare R2 and viewed ONLY by Admin for verification.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              
+              {/* 1. Profile Photo Selfie */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 hover:border-brand-300 transition-colors flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Camera className="w-3.5 h-3.5 text-brand-600" />
+                      Profile Selfie *
+                    </span>
+                    <span className="text-[9px] font-extrabold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
+                      Public Visible
+                    </span>
+                  </div>
+
+                  {photoSelfieUrl ? (
+                    <div className="relative group">
+                      <img src={photoSelfieUrl} alt="Selfie preview" className="w-full h-28 object-cover rounded-xl border border-slate-200" />
+                      <button
+                        type="button"
+                        onClick={() => setPhotoSelfieUrl('')}
+                        className="absolute top-1.5 right-1.5 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-slate-300 hover:border-brand-500 bg-white rounded-xl h-28 flex flex-col items-center justify-center cursor-pointer transition-colors p-2 text-center">
+                      <UploadCloud className="w-6 h-6 text-brand-500 mb-1" />
+                      <span className="text-[11px] font-extrabold text-slate-700">Upload Selfie Photo</span>
+                      <span className="text-[9px] text-slate-400">JPG, PNG (Max 5MB)</span>
+                      <input type="file" accept="image/*" onChange={e => handleFileUpload(e, setPhotoSelfieUrl)} className="hidden" />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. Aadhaar Card Document */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 hover:border-purple-300 transition-colors flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-purple-600" />
+                      Aadhaar Card *
+                    </span>
+                    <span className="text-[9px] font-extrabold bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded">
+                      Admin Only
+                    </span>
+                  </div>
+
+                  {aadhaarUrl ? (
+                    <div className="relative group">
+                      <img src={aadhaarUrl} alt="Aadhaar preview" className="w-full h-28 object-cover rounded-xl border border-slate-200" />
+                      <button
+                        type="button"
+                        onClick={() => setAadhaarUrl('')}
+                        className="absolute top-1.5 right-1.5 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-slate-300 hover:border-purple-500 bg-white rounded-xl h-28 flex flex-col items-center justify-center cursor-pointer transition-colors p-2 text-center">
+                      <FileText className="w-6 h-6 text-purple-500 mb-1" />
+                      <span className="text-[11px] font-extrabold text-slate-700">Upload Aadhaar Card</span>
+                      <span className="text-[9px] text-slate-400">Private Admin KYC</span>
+                      <input type="file" accept="image/*,.pdf" onChange={e => handleFileUpload(e, setAadhaarUrl)} className="hidden" />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {/* 3. Driving Licence (DL) Document */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 hover:border-emerald-300 transition-colors flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                      Driving Licence *
+                    </span>
+                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                      Admin Only
+                    </span>
+                  </div>
+
+                  {licenseUrl ? (
+                    <div className="relative group">
+                      <img src={licenseUrl} alt="DL preview" className="w-full h-28 object-cover rounded-xl border border-slate-200" />
+                      <button
+                        type="button"
+                        onClick={() => setLicenseUrl('')}
+                        className="absolute top-1.5 right-1.5 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-white rounded-xl h-28 flex flex-col items-center justify-center cursor-pointer transition-colors p-2 text-center">
+                      <FileText className="w-6 h-6 text-emerald-500 mb-1" />
+                      <span className="text-[11px] font-extrabold text-slate-700">Upload Driving Licence</span>
+                      <span className="text-[9px] text-slate-400">Private Admin Verification</span>
+                      <input type="file" accept="image/*,.pdf" onChange={e => handleFileUpload(e, setLicenseUrl)} className="hidden" />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Section 6: Brief Profile Summary */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Profile Summary & Driving Experience
