@@ -166,7 +166,7 @@ export const DriverDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* PLATFORM COMMISSION PAYMENT DUE ALERT CARD (CRITICAL BUSINESS FLOW) */}
+      {/* PLATFORM COMMISSION PAYMENT DUE ALERT CARD (CUSTOM ADMIN PAYMENT LINK) */}
       {isHold && (
         <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 text-white rounded-3xl p-6 shadow-xl mb-8 relative overflow-hidden">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
@@ -179,21 +179,41 @@ export const DriverDashboardPage: React.FC = () => {
                   PROFILE PAUSED • ACTION REQUIRED
                 </span>
                 <h3 className="text-xl font-black text-white mt-1">
-                  Pay ₹{pendingFee || 50} Platform Commission Fee to Get Next Booking
+                  Pay ₹{pendingFee || 50} Commission Fee to Unhold Your Account
                 </h3>
                 <p className="text-xs text-amber-50 mt-1 max-w-xl leading-relaxed">
-                  You completed a trip. Based on our <strong>3-5% platform commission structure</strong> (e.g. ₹500–₹1,000 → ₹40 fee, ₹1,000 → ₹50 fee, ₹2,000 → ₹100 fee), pay ₹{pendingFee || 50} to activate your profile online for your next customer booking.
+                  Your profile is paused on Hold. Admin has assigned your personal payment link below. Pay <strong>₹{pendingFee || 50}</strong> to unhold your profile and go Online for customer bookings.
                 </p>
+
+                {/* Display Admin Payment Link URL */}
+                <div className="mt-3 bg-amber-900/40 border border-amber-300/30 p-2.5 rounded-xl font-mono text-[11px] text-amber-100 flex items-center gap-2 max-w-md overflow-x-auto">
+                  <ExternalLink className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                  <span className="truncate">
+                    {driver.paymentLinkUrl || `https://pay.localdrivers.in/upi?amount=${pendingFee || 50}&driver=${driver.driverCode || driver.id}`}
+                  </span>
+                </div>
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch gap-2.5 w-full md:w-auto shrink-0">
-              <button
-                onClick={handlePayCommission}
-                className="px-6 py-3.5 bg-white text-slate-900 hover:bg-slate-100 font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
+              {/* OPEN ADMIN PAYMENT LINK */}
+              <a
+                href={driver.paymentLinkUrl || `https://pay.localdrivers.in/upi?amount=${pendingFee || 50}&driver=${driver.driverCode || driver.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-5 py-3.5 bg-white text-slate-900 hover:bg-slate-100 font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
               >
                 <CreditCard className="w-4 h-4 text-amber-600" />
-                Pay ₹{pendingFee || 50} & Activate Profile
+                Pay ₹{pendingFee || 50} via Payment Link
+              </a>
+
+              {/* VERIFY & UNHOLD PROFILE */}
+              <button
+                onClick={handlePayCommission}
+                className="px-5 py-3.5 bg-slate-900 hover:bg-slate-950 text-white font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 border border-slate-700"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                Verify & Unhold Profile
               </button>
             </div>
           </div>

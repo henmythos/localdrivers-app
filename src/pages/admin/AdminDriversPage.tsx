@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Search, Filter, ShieldCheck, Star, 
-  CheckCircle2, XCircle, ChevronRight, Eye, PauseCircle, PlayCircle, CreditCard 
+  CheckCircle2, XCircle, ChevronRight, Eye, PauseCircle, PlayCircle, CreditCard, Link2, ExternalLink, X, Save 
 } from 'lucide-react';
 import { Driver, DriverStatus } from '../../types';
 import { driversService } from '../../services/drivers';
@@ -15,6 +15,12 @@ export const AdminDriversPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
+  // Payment Link Editing Modal State
+  const [selectedDriverForPayment, setSelectedDriverForPayment] = useState<Driver | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number>(50);
+  const [paymentUrl, setPaymentUrl] = useState<string>('');
+  const [putOnHold, setPutOnHold] = useState<boolean>(true);
+
   const loadDrivers = () => {
     setDrivers(driversService.getAllDrivers());
   };
@@ -25,10 +31,37 @@ export const AdminDriversPage: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  const handleOpenPaymentModal = (driver: Driver) => {
+    setSelectedDriverForPayment(driver);
+    setPaymentAmount(driver.pendingCommissionFee || 50);
+    setPaymentUrl(
+      driver.paymentLinkUrl || 
+      `https://pay.localdrivers.in/upi?amount=${driver.pendingCommissionFee || 50}&driver=${driver.driverCode || driver.id}`
+    );
+    setPutOnHold(driver.isHold || driver.status === 'Hold' || driver.status === 'Payment Due' || true);
+  };
+
+  const handleSavePaymentLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDriverForPayment) return;
+
+    dbService.updateDriverProfile(selectedDriverForPayment.id, {
+      pendingCommissionFee: paymentAmount,
+      paymentLinkUrl: paymentUrl,
+      isHold: putOnHold,
+      status: putOnHold ? 'Payment Due' : selectedDriverForPayment.status,
+    });
+
+    setActionMsg(`✓ Saved custom payment link & ₹${paymentAmount} fee for ${selectedDriverForPayment.name}. Reflected on driver dashboard.`);
+    setSelectedDriverForPayment(null);
+    loadDrivers();
+    setTimeout(() => setActionMsg(null), 5000);
+  };
+
   const handleToggleHold = (driver: Driver) => {
     const isCurrentlyHold = driver.isHold || driver.status === 'Hold' || driver.status === 'Payment Due';
     if (isCurrentlyHold) {
-      driversService.payCommissionFee(driver.id, 50);
+      driversService.payCommissionFee(driver.id, driver.pendingCommissionFee || 50);
       driversService.toggleHold(driver.id, false);
       setActionMsg(`✓ Released ${driver.name}'s profile. Driver is now active online in customer search.`);
     } else {
@@ -68,9 +101,9 @@ export const AdminDriversPage: React.FC = () => {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Partner Driver Roster & Profile Hold</h1>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Partner Driver Roster & Payment Links</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Control online visibility, hold/release profiles, and process platform commission fees
+            Send custom payment links to driver dashboards for unholding accounts & platform commission clearance
           </p>
         </div>
 
@@ -97,7 +130,7 @@ export const AdminDriversPage: React.FC = () => {
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search by driver name or location..."
+            placeholder="Search by driver name, code (#A1B2C3), or area..."
             className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 text-xs font-medium"
           />
         </div>
@@ -119,7 +152,7 @@ export const AdminDriversPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Driver Table */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-soft overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -130,8 +163,9 @@ export const AdminDriversPage: React.FC = () => {
                 <th className="p-4">Experience</th>
                 <th className="p-4">Rating</th>
                 <th className="p-4">Commission Due</th>
+                <th className="p-4">Payment Link</th>
                 <th className="p-4">Visibility Status</th>
-                <th className="p-4 text-right">Hold / Release Actions</th>
+                <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -169,6 +203,22 @@ export const AdminDriversPage: React.FC = () => {
                     </td>
 
                     <td className="p-4">
+                      {driver.paymentLinkUrl ? (
+                        <a
+                          href={driver.paymentLinkUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-600 hover:underline font-mono"
+                        >
+                          <Link2 className="w-3 h-3" />
+                          Link Set
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 font-medium">Default UPI</span>
+                      )}
+                    </td>
+
+                    <td className="p-4">
                       {isCurrentlyHold ? (
                         <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200">
                           ON HOLD (Hidden)
@@ -186,6 +236,17 @@ export const AdminDriversPage: React.FC = () => {
 
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {/* SET PAYMENT LINK BUTTON */}
+                        <button
+                          onClick={() => handleOpenPaymentModal(driver)}
+                          className="px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-800 font-bold text-xs rounded-xl border border-brand-200 transition-colors flex items-center gap-1"
+                          title="Generate or edit payment link for driver dashboard"
+                        >
+                          <CreditCard className="w-3.5 h-3.5 text-brand-600" />
+                          Payment Link
+                        </button>
+
+                        {/* HOLD / UNHOLD TOGGLE */}
                         <button
                           onClick={() => handleToggleHold(driver)}
                           className={`px-3 py-1.5 font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1 ${
@@ -197,7 +258,7 @@ export const AdminDriversPage: React.FC = () => {
                           {isCurrentlyHold ? (
                             <>
                               <PlayCircle className="w-3.5 h-3.5" />
-                              Release Profile
+                              Unhold Profile
                             </>
                           ) : (
                             <>
@@ -223,6 +284,119 @@ export const AdminDriversPage: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* ADMIN PAYMENT LINK GENERATOR MODAL */}
+      {selectedDriverForPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-200 p-6 relative">
+            
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+              <div className="flex items-center gap-3">
+                <img
+                  src={selectedDriverForPayment.photo}
+                  alt={selectedDriverForPayment.name}
+                  className="w-10 h-10 rounded-xl object-cover"
+                />
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">{selectedDriverForPayment.name}</h3>
+                  <span className="text-xs font-mono font-bold text-brand-700">
+                    Code: #{selectedDriverForPayment.driverCode || 'A1B2C3'}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedDriverForPayment(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePaymentLink} className="space-y-4">
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                  Commission / Unhold Fee Amount (₹)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">
+                  Custom Payment Link URL (UPI / Gateway Link)
+                </label>
+                <input
+                  type="url"
+                  required
+                  value={paymentUrl}
+                  onChange={(e) => setPaymentUrl(e.target.value)}
+                  placeholder="e.g. https://pay.localdrivers.in/upi?amount=50"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-brand-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  This exact URL will be sent to <strong>{selectedDriverForPayment.name}'s Dashboard</strong> for unholding the account.
+                </p>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPaymentUrl(`https://pay.localdrivers.in/upi?amount=${paymentAmount}&driver=${selectedDriverForPayment.driverCode || selectedDriverForPayment.id}`)}
+                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] rounded-lg"
+                >
+                  Standard UPI Gateway
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentUrl(`upi://pay?pa=localdrivers@upi&pn=LocalDrivers&am=${paymentAmount}`)}
+                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] rounded-lg"
+                >
+                  GPay / PhonePe Deep Link
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                <input
+                  type="checkbox"
+                  id="putHoldCheck"
+                  checked={putOnHold}
+                  onChange={(e) => setPutOnHold(e.target.checked)}
+                  className="w-4 h-4 rounded accent-brand-600 cursor-pointer"
+                />
+                <label htmlFor="putHoldCheck" className="text-xs font-bold text-slate-800 cursor-pointer">
+                  Keep Driver Profile on Hold until Payment is Cleared
+                </label>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDriverForPayment(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  Save & Update Driver Dashboard
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );
