@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, Clock, MapPin, Navigation, Phone, 
-  ShieldCheck, CheckCircle2, AlertCircle, Car, ShieldAlert, Hash 
+  ShieldCheck, CheckCircle2, AlertCircle, Car, ShieldAlert, Hash, Lock, Search 
 } from 'lucide-react';
 import { Booking } from '../types';
 import { bookingsService } from '../services/bookings';
 import { dbService } from '../services/database';
+import { authService } from '../services/auth';
 import { ReportDriverModal } from '../components/common/ReportDriverModal';
 
 export const BookingDetailPage: React.FC = () => {
@@ -15,11 +16,48 @@ export const BookingDetailPage: React.FC = () => {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
 
+  // Security Access Verification State
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [verifyPhone, setVerifyPhone] = useState('');
+  const [authError, setAuthError] = useState('');
+
   const loadBooking = () => {
     if (id) {
       const found = bookingsService.getBookingById(id);
-      if (found) setBooking(found);
+      if (found) {
+        setBooking(found);
+        checkAuthorization(found);
+      }
     }
+  };
+
+  const checkAuthorization = (targetBooking: Booking) => {
+    const authState = authService.getAuthState();
+
+    // 1. Admin is always authorized
+    if (authState.isAdminAuthenticated) {
+      setIsAuthorized(true);
+      return;
+    }
+
+    // 2. Assigned driver is authorized
+    if (authState.isDriverAuthenticated && authState.driver && authState.driver.id === targetBooking.driverId) {
+      setIsAuthorized(true);
+      return;
+    }
+
+    // 3. Customer verified phone matches booking phone
+    const savedPhone = localStorage.getItem('localdrivers_verified_customer_phone');
+    if (savedPhone) {
+      const savedDigits = savedPhone.replace(/\D/g, '');
+      const bDigits = targetBooking.customerPhone.replace(/\D/g, '');
+      if (savedDigits.length >= 10 && (bDigits.endsWith(savedDigits) || savedDigits.endsWith(bDigits))) {
+        setIsAuthorized(true);
+        return;
+      }
+    }
+
+    setIsAuthorized(false);
   };
 
   useEffect(() => {
@@ -30,6 +68,28 @@ export const BookingDetailPage: React.FC = () => {
     return () => unsubscribe();
   }, [id]);
 
+  const handleAuthorizePhone = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+
+    if (!booking) return;
+
+    const inputDigits = verifyPhone.replace(/\D/g, '');
+    const bookingDigits = booking.customerPhone.replace(/\D/g, '');
+
+    if (!inputDigits || inputDigits.length < 10) {
+      setAuthError('Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    if (bookingDigits.endsWith(inputDigits) || inputDigits.endsWith(bookingDigits)) {
+      localStorage.setItem('localdrivers_verified_customer_phone', inputDigits);
+      setIsAuthorized(true);
+    } else {
+      setAuthError('Mobile number does not match this booking record');
+    }
+  };
+
   if (!booking) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center">
@@ -38,6 +98,60 @@ export const BookingDetailPage: React.FC = () => {
         <Link to="/bookings" className="px-4 py-2 bg-brand-600 text-white font-bold text-xs rounded-xl shadow-md">
           Back to Bookings
         </Link>
+      </div>
+    );
+  }
+
+  // Security Access Barrier Page
+  if (!isAuthorized) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-12">
+        <div className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-200/80 shadow-2xl text-center space-y-6">
+          <div className="w-14 h-14 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner border border-red-100">
+            <Lock className="w-7 h-7" />
+          </div>
+
+          <div>
+            <h1 className="text-2xl font-black text-slate-900">Protected Booking Record</h1>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              To protect customer privacy & route security, enter the <strong>10-digit Customer Mobile Number</strong> associated with Booking <strong className="font-mono text-brand-700">#{booking.id}</strong>.
+            </p>
+          </div>
+
+          {authError && (
+            <div className="p-3 bg-red-50 text-red-700 text-xs font-bold rounded-xl border border-red-200">
+              {authError}
+            </div>
+          )}
+
+          <form onSubmit={handleAuthorizePhone} className="space-y-4">
+            <div className="relative">
+              <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+              <input
+                type="tel"
+                required
+                value={verifyPhone}
+                onChange={e => setVerifyPhone(e.target.value)}
+                placeholder="Enter Customer Mobile Number"
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 text-xs font-mono font-bold"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              Verify Mobile & View Booking Details
+            </button>
+          </form>
+
+          <div className="pt-2">
+            <Link to="/bookings" className="text-xs font-bold text-slate-500 hover:text-slate-800">
+              ← Return to My Bookings Hub
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -234,3 +348,5 @@ export const BookingDetailPage: React.FC = () => {
     </div>
   );
 };
+
+export default BookingDetailPage;

@@ -14,18 +14,34 @@ export const bookingsService = {
     return dbService.getBookingById(id);
   },
 
-  // Get customer local bookings (remembered without account creation)
-  getCustomerBookings(): Booking[] {
-    const rawIds = localStorage.getItem(MY_BOOKINGS_STORAGE_KEY);
-    const savedIds: string[] = rawIds ? JSON.parse(rawIds) : [];
-    const allBookings = dbService.getBookings();
+  // Get customer local bookings filtered by verified customer phone number
+  getBookingsByCustomerPhone(phone: string): Booking[] {
+    const cleanPhoneDigits = phone.replace(/\D/g, '');
+    if (!cleanPhoneDigits || cleanPhoneDigits.length < 10) return [];
     
-    // Also include default demo booking LD-2026-0001 if no local items exist yet
-    if (savedIds.length === 0) {
-      const demoBooking = allBookings.find(b => b.id === 'LD-2026-0001');
-      return demoBooking ? [demoBooking] : [];
+    const allBookings = dbService.getBookings();
+    return allBookings.filter(b => {
+      const bDigits = b.customerPhone.replace(/\D/g, '');
+      return bDigits.endsWith(cleanPhoneDigits) || cleanPhoneDigits.endsWith(bDigits);
+    });
+  },
+
+  // Get customer local bookings remembered on device
+  getCustomerBookings(verifiedPhone?: string): Booking[] {
+    if (verifiedPhone) {
+      return this.getBookingsByCustomerPhone(verifiedPhone);
     }
 
+    const savedPhone = localStorage.getItem('localdrivers_verified_customer_phone');
+    if (savedPhone) {
+      return this.getBookingsByCustomerPhone(savedPhone);
+    }
+
+    const rawIds = localStorage.getItem(MY_BOOKINGS_STORAGE_KEY);
+    const savedIds: string[] = rawIds ? JSON.parse(rawIds) : [];
+    if (savedIds.length === 0) return [];
+    
+    const allBookings = dbService.getBookings();
     return allBookings.filter(b => savedIds.includes(b.id));
   },
 
@@ -38,9 +54,10 @@ export const bookingsService = {
   createBooking(bookingInput: Omit<Booking, 'id' | 'createdAt' | 'updatedAt' | 'status'>): Booking {
     const booking = dbService.createBooking(bookingInput);
 
-    // Save to local customer storage
+    // Save verified customer phone and local storage IDs
+    localStorage.setItem('localdrivers_verified_customer_phone', booking.customerPhone);
     const rawIds = localStorage.getItem(MY_BOOKINGS_STORAGE_KEY);
-    const savedIds: string[] = rawIds ? JSON.parse(rawIds) : ['LD-2026-0001'];
+    const savedIds: string[] = rawIds ? JSON.parse(rawIds) : [];
     if (!savedIds.includes(booking.id)) {
       savedIds.unshift(booking.id);
       localStorage.setItem(MY_BOOKINGS_STORAGE_KEY, JSON.stringify(savedIds));
