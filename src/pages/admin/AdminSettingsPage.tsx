@@ -32,9 +32,10 @@ export const AdminSettingsPage: React.FC = () => {
           </div>
 
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs font-mono space-y-1 text-slate-700">
-            <div>TURSO_DATABASE_URL: libsql://localdrivers-db-org.turso.io</div>
-            <div>TURSO_AUTH_TOKEN: ******************** (Set via .env)</div>
-            <div>STATUS: Operational (Abstracted DB Service)</div>
+            <div>TURSO_DATABASE_URL: libsql://database-cyclamen-desert-vercel-icfg-cnxx2242ugtirkjfrpb3fzwu.aws-ap-south-1.turso.io</div>
+            <div>TURSO_AUTH_TOKEN: eyJhbGciOiJFZERT... (Connected via Vercel Integration)</div>
+            <div>REGION: aws-ap-south-1 (Mumbai / South Asia Low Latency)</div>
+            <div>STATUS: Active & Synchronized</div>
           </div>
         </div>
 
