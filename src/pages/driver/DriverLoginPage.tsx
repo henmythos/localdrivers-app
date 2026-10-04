@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Car, Lock, Phone, ArrowRight, ShieldCheck, Sparkles, UserPlus } from 'lucide-react';
+import { Car, Lock, Phone, ArrowRight, ShieldCheck, UserPlus } from 'lucide-react';
 import { authService } from '../../services/auth';
 
 export const DriverLoginPage: React.FC = () => {
@@ -26,15 +26,6 @@ export const DriverLoginPage: React.FC = () => {
     }
   };
 
-  const handleDemoLogin = (phone: string) => {
-    const res = authService.loginDriver(phone, phone);
-    if (res.success) {
-      navigate('/driver/dashboard');
-    } else {
-      setError(res.error || 'Demo login failed');
-    }
-  };
-
   return (
     <div className="min-h-[85vh] flex items-center justify-center px-4 py-12">
       <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full border border-slate-200/80 shadow-2xl space-y-6">
@@ -55,7 +46,7 @@ export const DriverLoginPage: React.FC = () => {
           <ShieldCheck className="w-5 h-5 text-brand-600 shrink-0 mt-0.5" />
           <div>
             <span className="font-bold block">Mobile Number Authentication:</span>
-            <span>Your Mobile Number (e.g. <code>9876543210</code>) is your User ID and Password.</span>
+            <span>Use your registered 10-digit Mobile Number as User ID and Password.</span>
           </div>
         </div>
 
@@ -96,7 +87,7 @@ export const DriverLoginPage: React.FC = () => {
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="e.g. 9876543210"
+                placeholder="••••••••••••"
                 className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 text-xs font-medium font-mono"
               />
             </div>
@@ -121,20 +112,6 @@ export const DriverLoginPage: React.FC = () => {
             <UserPlus className="w-4 h-4 text-brand-400" />
             Register as New Driver Partner
           </Link>
-        </div>
-
-        {/* Quick Demo Login Buttons */}
-        <div className="pt-2 border-t border-slate-100 text-center space-y-2">
-          <span className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
-            Quick Live Demo Login
-          </span>
-          <button
-            onClick={() => handleDemoLogin('9876543210')}
-            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
-          >
-            <Sparkles className="w-4 h-4 text-emerald-200" />
-            Login as Ravi Kumar (98765 43210)
-          </button>
         </div>
 
         <div className="text-center pt-2">
