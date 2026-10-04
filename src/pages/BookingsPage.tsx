@@ -229,12 +229,20 @@ export const BookingsPage: React.FC = () => {
                             #{booking.driverCode || 'A1B2C3'}
                           </span>
                         </div>
-                        <a
-                          href={`tel:${booking.driverPhone}`}
-                          className="text-xs text-brand-600 font-semibold block hover:underline mt-0.5"
-                        >
-                          {booking.driverPhone}
-                        </a>
+                        {booking.status === 'Pending' ? (
+                          <span className="text-[11px] text-amber-800 font-mono font-bold block mt-0.5 flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
+                            <Lock className="w-3 h-3 text-amber-600 shrink-0" />
+                            +91 9876* ***** (Hidden until driver accepts)
+                          </span>
+                        ) : (
+                          <a
+                            href={`tel:${booking.driverPhone}`}
+                            className="text-xs text-emerald-700 font-extrabold flex items-center gap-1 hover:underline mt-0.5"
+                          >
+                            <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                            {booking.driverPhone} (Call Driver)
+                          </a>
+                        )}
                       </div>
                     </div>
 

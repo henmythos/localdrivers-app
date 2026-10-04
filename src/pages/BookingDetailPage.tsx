@@ -249,13 +249,27 @@ export const BookingDetailPage: React.FC = () => {
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
               </div>
               <p className="text-xs text-slate-500 mt-0.5">Verified Professional Driver</p>
-              <a
-                href={`tel:${booking.driverPhone}`}
-                className="text-xs font-bold text-brand-600 hover:underline flex items-center gap-1 mt-1"
-              >
-                <Phone className="w-3.5 h-3.5" />
-                {booking.driverPhone}
-              </a>
+              {booking.status === 'Pending' ? (
+                <div className="mt-1.5 flex flex-col gap-1">
+                  <span className="text-[11px] font-mono font-bold text-amber-900 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200/80 inline-flex items-center gap-1.5 self-start">
+                    <Lock className="w-3.5 h-3.5 text-amber-600" />
+                    Mobile: +91 9876* ***** (Hidden until driver accepts)
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    🔒 Driver contact number & call button will unlock as soon as {booking.driverName} accepts your ride.
+                  </span>
+                </div>
+              ) : (
+                <div className="mt-1.5 flex items-center gap-2">
+                  <a
+                    href={`tel:${booking.driverPhone}`}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                    Call Driver ({booking.driverPhone})
+                  </a>
+                </div>
+              )}
             </div>
           </div>
 
@@ -324,7 +338,11 @@ export const BookingDetailPage: React.FC = () => {
           <div>
             <span className="text-slate-400 font-bold uppercase block mb-1">Customer Details</span>
             <span className="font-bold text-slate-900 block">{booking.customerName}</span>
-            <span className="text-slate-500 font-medium">{booking.customerPhone}</span>
+            <span className="text-slate-500 font-medium font-mono text-xs">
+              {booking.status === 'Pending' && authService.getAuthState().isDriverAuthenticated
+                ? '🔒 +91 9988* ***** (Hidden until ride accepted)'
+                : booking.customerPhone}
+            </span>
           </div>
         </div>
 
