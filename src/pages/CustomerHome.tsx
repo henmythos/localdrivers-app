@@ -4,8 +4,9 @@ import {
   MapPin, ChevronDown, ChevronRight, Clock, Calendar, User, Car, 
   ShieldCheck, Star, Navigation, AlertTriangle, Headphones, Shield, Sparkles 
 } from 'lucide-react';
-import { Driver, UserLocation } from '../types';
+import { Driver, UserLocation, ServiceCategory } from '../types';
 import { driversService } from '../services/drivers';
+import { dbService } from '../services/database';
 import { DriverCard } from '../components/driver/DriverCard';
 import { BookingModal } from '../components/booking/BookingModal';
 
@@ -17,11 +18,21 @@ interface CustomerHomeProps {
 export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequestLocation }) => {
   const navigate = useNavigate();
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [services, setServices] = useState<ServiceCategory[]>([]);
   const [selectedDriverForBooking, setSelectedDriverForBooking] = useState<Driver | null>(null);
   const [preselectedService, setPreselectedService] = useState<any>(undefined);
 
-  useEffect(() => {
+  const loadData = () => {
     setDrivers(driversService.getApprovedDrivers());
+    setServices(dbService.getServices());
+  };
+
+  useEffect(() => {
+    loadData();
+    const unsubscribe = dbService.subscribe(() => {
+      loadData();
+    });
+    return () => unsubscribe();
   }, []);
 
   const handleSelectCategory = (serviceName: string) => {
@@ -174,7 +185,7 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
 
               <div className="mt-4 pt-2">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white text-cardPurple-text border border-purple-200 shadow-xs">
-                  ₹ 28,000 / 32,000
+                  ₹ {(services.find(s => s.title === 'Monthly Driver')?.startingPrice || 28000).toLocaleString('en-IN')} / month
                 </span>
               </div>
             </div>
@@ -226,9 +237,15 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
 
           <div className="flex items-center gap-4 z-10">
             <div className="bg-yellow-400 text-navy-900 p-3 rounded-2xl text-center shadow-lg shrink-0">
-              <span className="text-[10px] font-extrabold uppercase block">4 Hours</span>
-              <span className="text-xl font-black block leading-none">₹1,000</span>
-              <span className="text-[9px] font-bold text-navy-800 block mt-0.5">+ ₹250 / Extra Hour</span>
+              <span className="text-[10px] font-extrabold uppercase block">
+                {services.find(s => s.title === 'VIP Driver')?.minimumHours || 4} Hours Base
+              </span>
+              <span className="text-xl font-black block leading-none">
+                ₹{services.find(s => s.title === 'VIP Driver')?.startingPrice || 1000}
+              </span>
+              <span className="text-[9px] font-bold text-navy-800 block mt-0.5">
+                + ₹{services.find(s => s.title === 'VIP Driver')?.extraHourRate || 250} / Extra Hour
+              </span>
             </div>
           </div>
         </div>

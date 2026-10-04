@@ -132,6 +132,36 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
       )}
 
+      {/* SITE-WIDE PRICING & HOURLY CHARGES CONTROL BANNER */}
+      <div className="bg-gradient-to-r from-slate-900 via-brand-950 to-slate-900 text-white rounded-3xl p-6 shadow-xl mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border border-brand-800/40">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-brand-500/20 border border-brand-400/30 flex items-center justify-center shrink-0">
+            <Grid className="w-6 h-6 text-brand-300" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-brand-300 bg-brand-500/20 px-2 py-0.5 rounded">
+                Site-Wide Controls
+              </span>
+            </div>
+            <h3 className="font-black text-white text-lg sm:text-xl mt-0.5">
+              Hourly Rates & Pricing Configuration
+            </h3>
+            <p className="text-xs text-slate-300 mt-1 max-w-xl">
+              Decide hourly charges (₹299/hr, ₹349/hr, ₹1,000/hr), base package rates, night allowances, and outstation fees for all drive types site-wide.
+            </p>
+          </div>
+        </div>
+
+        <Link
+          to="/admin/services"
+          className="px-6 py-3.5 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-2xl shadow-lg transition-all shrink-0 flex items-center gap-2 border border-brand-400/30"
+        >
+          <Settings className="w-4 h-4" />
+          Manage Rates & Drive Types
+        </Link>
+      </div>
+
       {/* Recent Drivers & Bookings Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         

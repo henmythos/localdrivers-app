@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, CheckCircle2, Calendar, Clock, MapPin, Navigation, Car, ShieldCheck, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Driver, ServiceType, Booking } from '../../types';
 import { bookingsService } from '../../services/bookings';
-import { INITIAL_SERVICES } from '../../services/database';
+import { dbService } from '../../services/database';
 
 interface BookingModalProps {
   driver: Driver;
@@ -40,15 +40,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   // Confirmed booking response
   const [createdBooking, setCreatedBooking] = useState<Booking | null>(null);
 
-  // Fare Calculation Logic
+  // Dynamic Site-Wide Fare Calculation Logic from Admin Dashboard
   const getEstimatedFare = () => {
-    let multiplier = 1;
-    if (selectedService === 'Outstation Driver') multiplier = 8;
-    if (selectedService === 'Monthly Driver') multiplier = 60;
-    if (selectedService === 'VIP Driver') multiplier = 2.5;
-    if (selectedService === 'Escort Driver') multiplier = 3;
-
-    return Math.round(driver.startingPrice * multiplier);
+    const srvConfig = dbService.getServiceByTitle(selectedService);
+    if (srvConfig) {
+      return srvConfig.startingPrice;
+    }
+    return driver.startingPrice || 299;
   };
 
   const estimatedFare = getEstimatedFare();
@@ -133,7 +131,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               </p>
 
               <div className="grid grid-cols-1 gap-2.5 max-h-[300px] overflow-y-auto pr-1">
-                {INITIAL_SERVICES.map(srv => {
+                {dbService.getServices().map(srv => {
                   const isSupported = driver.services.includes(srv.title);
                   const isSelected = selectedService === srv.title;
 

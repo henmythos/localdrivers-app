@@ -18,7 +18,11 @@ export const INITIAL_SERVICES: ServiceCategory[] = [
     fullDescription: 'Professional hourly drivers for navigating city traffic, shopping trips, family outings, and urban commutes in your vehicle.',
     icon: 'Car',
     startingPrice: 299,
+    extraHourRate: 99,
+    nightAllowance: 200,
+    minimumHours: 2,
     badge: 'Popular',
+    isActive: true,
   },
   {
     id: 'srv-2',
@@ -27,7 +31,12 @@ export const INITIAL_SERVICES: ServiceCategory[] = [
     fullDescription: 'Highway-certified drivers trained for night driving, mountain terrains, and long-distance road trips across states.',
     icon: 'MapPin',
     startingPrice: 1499,
+    extraHourRate: 150,
+    nightAllowance: 300,
+    minimumHours: 12,
+    outstationPerKmRate: 12,
     badge: 'Top Rated',
+    isActive: true,
   },
   {
     id: 'srv-3',
@@ -36,7 +45,11 @@ export const INITIAL_SERVICES: ServiceCategory[] = [
     fullDescription: 'Full-time or part-time monthly dedicated drivers tailored for executives, senior citizens, and daily office drop/pickups (₹28,000 / ₹32,000 per month).',
     icon: 'Calendar',
     startingPrice: 28000,
+    extraHourRate: 120,
+    nightAllowance: 250,
+    minimumHours: 200,
     badge: 'Best Value',
+    isActive: true,
   },
   {
     id: 'srv-4',
@@ -45,6 +58,10 @@ export const INITIAL_SERVICES: ServiceCategory[] = [
     fullDescription: 'Flexible on-demand private drivers for personal cars (Manual & Automatic) available on short notice.',
     icon: 'UserCheck',
     startingPrice: 349,
+    extraHourRate: 99,
+    nightAllowance: 200,
+    minimumHours: 2,
+    isActive: true,
   },
   {
     id: 'srv-5',
@@ -53,7 +70,11 @@ export const INITIAL_SERVICES: ServiceCategory[] = [
     fullDescription: 'Chauffeurs dressed in formal attire trained for high-end luxury vehicles (BMW, Audi, Mercedes, Volvo, Jaguar).',
     icon: 'Crown',
     startingPrice: 1000,
+    extraHourRate: 250,
+    nightAllowance: 400,
+    minimumHours: 4,
     badge: 'Premium',
+    isActive: true,
   },
   {
     id: 'srv-6',
@@ -62,6 +83,10 @@ export const INITIAL_SERVICES: ServiceCategory[] = [
     fullDescription: 'Specially vetted drivers providing secure transit for night travel, late event returns, corporate delegates, and special guests.',
     icon: 'ShieldCheck',
     startingPrice: 899,
+    extraHourRate: 199,
+    nightAllowance: 300,
+    minimumHours: 4,
+    isActive: true,
   },
 ];
 
@@ -548,6 +573,7 @@ class DatabaseService {
   private driversKey = 'localdrivers_db_drivers';
   private bookingsKey = 'localdrivers_db_bookings';
   private reviewsKey = 'localdrivers_db_reviews';
+  private servicesKey = 'localdrivers_db_services';
   private listeners: (() => void)[] = [];
 
   constructor() {
@@ -564,6 +590,9 @@ class DatabaseService {
     if (!localStorage.getItem(this.reviewsKey)) {
       localStorage.setItem(this.reviewsKey, JSON.stringify(INITIAL_REVIEWS));
     }
+    if (!localStorage.getItem(this.servicesKey)) {
+      localStorage.setItem(this.servicesKey, JSON.stringify(INITIAL_SERVICES));
+    }
   }
 
   public subscribe(listener: () => void): () => void {
@@ -575,6 +604,35 @@ class DatabaseService {
 
   private notify() {
     this.listeners.forEach(listener => listener());
+  }
+
+  // --- SERVICE CATEGORIES & SITE-WIDE PRICING CRUD ---
+  public getServices(): ServiceCategory[] {
+    const raw = localStorage.getItem(this.servicesKey);
+    return raw ? JSON.parse(raw) : INITIAL_SERVICES;
+  }
+
+  public getServiceByTitle(title: string): ServiceCategory | undefined {
+    return this.getServices().find(s => s.title === title);
+  }
+
+  public updateServiceCategory(serviceData: ServiceCategory): ServiceCategory {
+    const services = this.getServices();
+    const index = services.findIndex(s => s.id === serviceData.id || s.title === serviceData.title);
+    if (index !== -1) {
+      services[index] = { ...services[index], ...serviceData };
+    } else {
+      services.push(serviceData);
+    }
+    localStorage.setItem(this.servicesKey, JSON.stringify(services));
+    this.notify();
+    return services[index !== -1 ? index : services.length - 1];
+  }
+
+  public resetServicesToDefaults(): ServiceCategory[] {
+    localStorage.setItem(this.servicesKey, JSON.stringify(INITIAL_SERVICES));
+    this.notify();
+    return INITIAL_SERVICES;
   }
 
   // --- DRIVERS CRUD ---

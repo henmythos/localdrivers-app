@@ -1,17 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Car, MapPin, Calendar, UserCheck, Crown, Shield, 
-  CheckCircle2, ArrowRight, ShieldCheck, Sparkles 
+  CheckCircle2, ArrowRight, ShieldCheck, Sparkles, Clock
 } from 'lucide-react';
-import { INITIAL_SERVICES, INITIAL_DRIVERS } from '../services/database';
+import { dbService } from '../services/database';
+import { driversService } from '../services/drivers';
 import { BookingModal } from '../components/booking/BookingModal';
-import { Driver } from '../types';
+import { Driver, ServiceCategory } from '../types';
 
 export const ServicesPage: React.FC = () => {
   const navigate = useNavigate();
+  const [services, setServices] = useState<ServiceCategory[]>([]);
   const [selectedService, setSelectedService] = useState<any>(null);
   const [selectedDriverForBooking, setSelectedDriverForBooking] = useState<Driver | null>(null);
+
+  const loadServices = () => {
+    setServices(dbService.getServices().filter(s => s.isActive));
+  };
+
+  useEffect(() => {
+    loadServices();
+    const unsubscribe = dbService.subscribe(() => {
+      loadServices();
+    });
+    return () => unsubscribe();
+  }, []);
 
   const getServiceIcon = (iconName: string) => {
     switch (iconName) {
@@ -41,7 +55,7 @@ export const ServicesPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {INITIAL_SERVICES.map(srv => (
+        {services.map(srv => (
           <div
             key={srv.id}
             className="bg-white rounded-3xl p-6 border border-slate-200 shadow-soft hover:shadow-card transition-all duration-200 flex flex-col justify-between group"
@@ -67,6 +81,17 @@ export const ServicesPage: React.FC = () => {
               <p className="text-xs text-slate-600 mt-3 leading-relaxed">
                 {srv.fullDescription}
               </p>
+
+              {/* Hourly & Package Details */}
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500 font-semibold flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-brand-600" />
+                  Min {srv.minimumHours || 2} Hours
+                </span>
+                <span className="text-slate-700 font-bold">
+                  + ₹{srv.extraHourRate || 99}/extra hr
+                </span>
+              </div>
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
@@ -75,14 +100,15 @@ export const ServicesPage: React.FC = () => {
                 <span className="text-lg font-black text-slate-900">
                   ₹{srv.startingPrice}
                   <span className="text-xs font-normal text-slate-500">
-                    {srv.title === 'Monthly Driver' ? '/month' : '/trip'}
+                    {srv.title === 'Monthly Driver' ? '/month' : '/base'}
                   </span>
                 </span>
               </div>
 
               <button
                 onClick={() => {
-                  const driver = INITIAL_DRIVERS.find(d => d.services.includes(srv.title)) || INITIAL_DRIVERS[0];
+                  const driversList = driversService.getApprovedDrivers();
+                  const driver = driversList.find(d => d.services.includes(srv.title as any)) || driversList[0];
                   setSelectedService(srv.title);
                   setSelectedDriverForBooking(driver);
                 }}

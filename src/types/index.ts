@@ -54,8 +54,13 @@ export interface ServiceCategory {
   shortDescription: string;
   fullDescription: string;
   icon: string;
-  startingPrice: number;
+  startingPrice: number; // Base starting price in ₹
+  extraHourRate: number; // Per extra hour rate in ₹
+  nightAllowance: number; // Night driver charge in ₹ (10 PM - 6 AM)
+  minimumHours: number; // Minimum package hours (e.g. 2, 4, 8, 12)
+  outstationPerKmRate?: number; // Per km charge for outstation drives
   badge?: string;
+  isActive: boolean;
 }
 
 export interface Booking {
