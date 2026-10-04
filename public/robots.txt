@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /driver/dashboard
+
+Sitemap: https://localdrivers.in/sitemap.xml
