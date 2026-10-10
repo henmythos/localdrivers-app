@@ -4,6 +4,8 @@ import { Header } from './components/common/Header';
 import { BottomNav } from './components/common/BottomNav';
 import { UserLocation } from './types';
 import { DEFAULT_HYDERABAD_LOCATION } from './services/database';
+import { locationService } from './services/location';
+import { LocationModal } from './components/common/LocationModal';
 
 // Customer Pages
 import { CustomerHome } from './pages/CustomerHome';
@@ -38,36 +40,17 @@ import { CancellationPolicyPage } from './pages/legal/CancellationPolicyPage';
 import { DataDeletionPage } from './pages/legal/DataDeletionPage';
 
 export const App: React.FC = () => {
-  const [userLocation, setUserLocation] = useState<UserLocation>(DEFAULT_HYDERABAD_LOCATION);
+  const [userLocation, setUserLocation] = useState<UserLocation>(() => locationService.getStoredLocation());
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
-  const requestGeolocation = () => {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            address: 'Your GPS Location (Hyderabad)',
-            area: 'Near You',
-            city: 'Hyderabad',
-            isFallback: false,
-          });
-        },
-        (error) => {
-          console.warn('Geolocation permission denied or error. Using Hyderabad default fallback.', error);
-          setUserLocation(DEFAULT_HYDERABAD_LOCATION);
-        },
-        { timeout: 5000 }
-      );
-    } else {
-      setUserLocation(DEFAULT_HYDERABAD_LOCATION);
-    }
+  const handleOpenLocationModal = () => {
+    setIsLocationModalOpen(true);
   };
 
-  useEffect(() => {
-    // Attempt automatic geolocation lookup on load
-    requestGeolocation();
-  }, []);
+  const handleSelectLocation = (location: UserLocation) => {
+    setUserLocation(location);
+    locationService.saveLocation(location);
+  };
 
   return (
     <BrowserRouter>
@@ -76,7 +59,7 @@ export const App: React.FC = () => {
         {/* Header */}
         <Header
           userLocation={userLocation}
-          onRequestLocation={requestGeolocation}
+          onRequestLocation={handleOpenLocationModal}
         />
 
         {/* Main Route Content */}
@@ -88,7 +71,7 @@ export const App: React.FC = () => {
               element={
                 <CustomerHome
                   userLocation={userLocation}
-                  onRequestLocation={requestGeolocation}
+                  onRequestLocation={handleOpenLocationModal}
                 />
               }
             />
@@ -97,7 +80,7 @@ export const App: React.FC = () => {
               element={
                 <FindDriversPage
                   userLocation={userLocation}
-                  onRequestLocation={requestGeolocation}
+                  onRequestLocation={handleOpenLocationModal}
                 />
               }
             />
@@ -140,6 +123,14 @@ export const App: React.FC = () => {
         {/* Mobile Bottom Navigation */}
         <BottomNav />
       </div>
+
+      {/* Interactive Location Selector Modal */}
+      <LocationModal
+        isOpen={isLocationModalOpen}
+        onClose={() => setIsLocationModalOpen(false)}
+        currentLocation={userLocation}
+        onSelectLocation={handleSelectLocation}
+      />
     </BrowserRouter>
   );
 };
