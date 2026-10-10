@@ -77,13 +77,6 @@ export const authService = {
       return { success: true, driver: found };
     }
 
-    // Default demo fallback: Ravi Kumar (9876543210)
-    const defaultRavi = drivers.find(d => d.id === 'drv-1');
-    if (defaultRavi) {
-      localStorage.setItem(DRIVER_AUTH_KEY, defaultRavi.id);
-      return { success: true, driver: defaultRavi };
-    }
-
     return { success: false, error: 'Driver account not found with this Mobile Number.' };
   },
 
