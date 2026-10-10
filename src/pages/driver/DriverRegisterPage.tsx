@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { User, Phone, MapPin, Briefcase, Globe, Car, ShieldCheck, CheckCircle2, ArrowRight, Camera, FileText, Lock, UploadCloud, Eye } from 'lucide-react';
 import { driversService } from '../../services/drivers';
+import { CameraCaptureModal } from '../../components/driver/CameraCaptureModal';
 
 const AVAILABLE_SERVICES = [
   'City Driver',
@@ -36,6 +37,13 @@ export const DriverRegisterPage: React.FC = () => {
   const [photoSelfieUrl, setPhotoSelfieUrl] = useState<string>('');
   const [aadhaarUrl, setAadhaarUrl] = useState<string>('');
   const [licenseUrl, setLicenseUrl] = useState<string>('');
+
+  // Live Camera Modal State
+  const [activeCameraModal, setActiveCameraModal] = useState<{
+    docTitle: string;
+    docType: 'selfie' | 'document';
+    targetSetter: (val: string) => void;
+  } | null>(null);
 
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -396,7 +404,7 @@ export const DriverRegisterPage: React.FC = () => {
 
                   {photoSelfieUrl ? (
                     <div className="relative group">
-                      <img src={photoSelfieUrl} alt="Selfie preview" className="w-full h-28 object-cover rounded-xl border border-slate-200" />
+                      <img src={photoSelfieUrl} alt="Selfie preview" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
                       <button
                         type="button"
                         onClick={() => setPhotoSelfieUrl('')}
@@ -406,12 +414,26 @@ export const DriverRegisterPage: React.FC = () => {
                       </button>
                     </div>
                   ) : (
-                    <label className="border-2 border-dashed border-slate-300 hover:border-brand-500 bg-white rounded-xl h-28 flex flex-col items-center justify-center cursor-pointer transition-colors p-2 text-center">
-                      <UploadCloud className="w-6 h-6 text-brand-500 mb-1" />
-                      <span className="text-[11px] font-extrabold text-slate-700">Upload Selfie Photo</span>
-                      <span className="text-[9px] text-slate-400">JPG, PNG (Max 5MB)</span>
-                      <input type="file" accept="image/*" onChange={e => handleFileUpload(e, setPhotoSelfieUrl)} className="hidden" />
-                    </label>
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveCameraModal({
+                          docTitle: 'Profile Photo Selfie',
+                          docType: 'selfie',
+                          targetSetter: setPhotoSelfieUrl,
+                        })}
+                        className="w-full py-3 px-3 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Camera className="w-4 h-4" />
+                        Capture Live Selfie
+                      </button>
+
+                      <label className="border border-dashed border-slate-300 hover:border-brand-400 bg-white rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 cursor-pointer text-center">
+                        <UploadCloud className="w-4 h-4 text-slate-500" />
+                        <span className="text-[11px] font-bold text-slate-700">Choose from Gallery</span>
+                        <input type="file" accept="image/*" onChange={e => handleFileUpload(e, setPhotoSelfieUrl)} className="hidden" />
+                      </label>
+                    </div>
                   )}
                 </div>
               </div>
@@ -431,7 +453,7 @@ export const DriverRegisterPage: React.FC = () => {
 
                   {aadhaarUrl ? (
                     <div className="relative group">
-                      <img src={aadhaarUrl} alt="Aadhaar preview" className="w-full h-28 object-cover rounded-xl border border-slate-200" />
+                      <img src={aadhaarUrl} alt="Aadhaar preview" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
                       <button
                         type="button"
                         onClick={() => setAadhaarUrl('')}
@@ -441,12 +463,26 @@ export const DriverRegisterPage: React.FC = () => {
                       </button>
                     </div>
                   ) : (
-                    <label className="border-2 border-dashed border-slate-300 hover:border-purple-500 bg-white rounded-xl h-28 flex flex-col items-center justify-center cursor-pointer transition-colors p-2 text-center">
-                      <FileText className="w-6 h-6 text-purple-500 mb-1" />
-                      <span className="text-[11px] font-extrabold text-slate-700">Upload Aadhaar Card</span>
-                      <span className="text-[9px] text-slate-400">Private Admin KYC</span>
-                      <input type="file" accept="image/*,.pdf" onChange={e => handleFileUpload(e, setAadhaarUrl)} className="hidden" />
-                    </label>
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveCameraModal({
+                          docTitle: 'Aadhaar Card Document',
+                          docType: 'document',
+                          targetSetter: setAadhaarUrl,
+                        })}
+                        className="w-full py-3 px-3 bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Camera className="w-4 h-4" />
+                        Capture Aadhaar Camera
+                      </button>
+
+                      <label className="border border-dashed border-slate-300 hover:border-purple-400 bg-white rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 cursor-pointer text-center">
+                        <FileText className="w-4 h-4 text-slate-500" />
+                        <span className="text-[11px] font-bold text-slate-700">Choose from Files</span>
+                        <input type="file" accept="image/*,.pdf" onChange={e => handleFileUpload(e, setAadhaarUrl)} className="hidden" />
+                      </label>
+                    </div>
                   )}
                 </div>
               </div>
@@ -466,7 +502,7 @@ export const DriverRegisterPage: React.FC = () => {
 
                   {licenseUrl ? (
                     <div className="relative group">
-                      <img src={licenseUrl} alt="DL preview" className="w-full h-28 object-cover rounded-xl border border-slate-200" />
+                      <img src={licenseUrl} alt="DL preview" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
                       <button
                         type="button"
                         onClick={() => setLicenseUrl('')}
@@ -476,12 +512,26 @@ export const DriverRegisterPage: React.FC = () => {
                       </button>
                     </div>
                   ) : (
-                    <label className="border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-white rounded-xl h-28 flex flex-col items-center justify-center cursor-pointer transition-colors p-2 text-center">
-                      <FileText className="w-6 h-6 text-emerald-500 mb-1" />
-                      <span className="text-[11px] font-extrabold text-slate-700">Upload Driving Licence</span>
-                      <span className="text-[9px] text-slate-400">Private Admin Verification</span>
-                      <input type="file" accept="image/*,.pdf" onChange={e => handleFileUpload(e, setLicenseUrl)} className="hidden" />
-                    </label>
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveCameraModal({
+                          docTitle: 'Driving Licence (DL)',
+                          docType: 'document',
+                          targetSetter: setLicenseUrl,
+                        })}
+                        className="w-full py-3 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Camera className="w-4 h-4" />
+                        Capture DL Camera
+                      </button>
+
+                      <label className="border border-dashed border-slate-300 hover:border-emerald-400 bg-white rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 cursor-pointer text-center">
+                        <FileText className="w-4 h-4 text-slate-500" />
+                        <span className="text-[11px] font-bold text-slate-700">Choose from Files</span>
+                        <input type="file" accept="image/*,.pdf" onChange={e => handleFileUpload(e, setLicenseUrl)} className="hidden" />
+                      </label>
+                    </div>
                   )}
                 </div>
               </div>
@@ -522,6 +572,20 @@ export const DriverRegisterPage: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Full Screen Live Camera Capture Modal */}
+      {activeCameraModal && (
+        <CameraCaptureModal
+          isOpen={!!activeCameraModal}
+          docTitle={activeCameraModal.docTitle}
+          docType={activeCameraModal.docType}
+          onClose={() => setActiveCameraModal(null)}
+          onCapture={(imageDataUrl) => {
+            activeCameraModal.targetSetter(imageDataUrl);
+            setActiveCameraModal(null);
+          }}
+        />
+      )}
     </div>
   );
 };
