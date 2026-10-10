@@ -66,8 +66,8 @@ export const INITIAL_SERVICES: ServiceCategory[] = [
   {
     id: 'srv-5',
     title: 'VIP Driver',
-    shortDescription: 'Car + Driver / Self Drive - Premium Luxury Cars',
-    fullDescription: 'Chauffeurs dressed in formal attire trained for high-end luxury vehicles (BMW, Audi, Mercedes, Volvo, Jaguar).',
+    shortDescription: 'Professional Driver for Luxury & Executive Cars',
+    fullDescription: 'Formal chauffeurs trained to drive high-end luxury vehicles in your own car.',
     icon: 'Crown',
     startingPrice: 1000,
     extraHourRate: 250,

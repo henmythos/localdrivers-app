@@ -1,5 +1,26 @@
 import { dbService } from './database';
-import { Driver, FilterState } from '../types';
+import { Driver, FilterState, UserLocation } from '../types';
+
+export function calculateHaversineDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+  const R = 6371; // Radius of Earth in km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const dist = R * c;
+  return Math.round(dist * 10) / 10;
+}
 
 export const driversService = {
   // Get all approved drivers for customer discovery
@@ -22,16 +43,39 @@ export const driversService = {
     return dbService.getDriverById(id);
   },
 
-  // Filter drivers based on customer criteria
-  filterDrivers(drivers: Driver[], filters: FilterState): Driver[] {
-    return drivers.filter(driver => {
+  // Filter drivers based on customer criteria & sort by distance
+  filterDrivers(drivers: Driver[], filters: FilterState, userLocation?: UserLocation): Driver[] {
+    const processed = drivers.map(driver => {
+      let computedDistance = driver.distanceKm;
+      if (
+        userLocation &&
+        userLocation.latitude &&
+        userLocation.longitude &&
+        driver.latitude &&
+        driver.longitude
+      ) {
+        const calculated = calculateHaversineDistance(
+          userLocation.latitude,
+          userLocation.longitude,
+          driver.latitude,
+          driver.longitude
+        );
+        if (calculated > 0) {
+          computedDistance = calculated;
+        }
+      }
+      return { ...driver, distanceKm: computedDistance };
+    });
+
+    const filtered = processed.filter(driver => {
       // Search query (name, area, city, vehicle)
       if (filters.searchQuery.trim()) {
         const query = filters.searchQuery.toLowerCase();
         const matchesName = driver.name.toLowerCase().includes(query);
         const matchesArea = driver.area.toLowerCase().includes(query);
         const matchesCity = driver.city.toLowerCase().includes(query);
-        if (!matchesName && !matchesArea && !matchesCity) return false;
+        const matchesCode = (driver.driverCode || '').toLowerCase().includes(query);
+        if (!matchesName && !matchesArea && !matchesCity && !matchesCode) return false;
       }
 
       // Service Category filter
@@ -39,7 +83,7 @@ export const driversService = {
         if (!driver.services.includes(filters.service as any)) return false;
       }
 
-      // Distance filter
+      // Distance filter (supports up to 30 km radius)
       if (filters.maxDistance && driver.distanceKm > filters.maxDistance) {
         return false;
       }
@@ -61,6 +105,9 @@ export const driversService = {
 
       return true;
     });
+
+    // Sort by distance ascending (nearest drivers first)
+    return filtered.sort((a, b) => a.distanceKm - b.distanceKm);
   },
 
   // Admin actions
@@ -93,3 +140,4 @@ export const driversService = {
     return dbService.registerDriver(input);
   }
 };
+

@@ -23,7 +23,20 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
   const [preselectedService, setPreselectedService] = useState<any>(undefined);
 
   const loadData = () => {
-    setDrivers(driversService.getApprovedDrivers());
+    const rawDrivers = driversService.getApprovedDrivers();
+    const sorted = driversService.filterDrivers(
+      rawDrivers,
+      {
+        searchQuery: '',
+        service: 'All',
+        maxDistance: 30,
+        minExperience: 0,
+        minRating: 0,
+        availableOnly: false,
+      },
+      userLocation
+    );
+    setDrivers(sorted);
     setServices(dbService.getServices());
   };
 
@@ -33,7 +46,7 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
       loadData();
     });
     return () => unsubscribe();
-  }, []);
+  }, [userLocation]);
 
   const handleSelectCategory = (serviceName: string) => {
     setPreselectedService(serviceName);
@@ -190,7 +203,7 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
               </div>
             </div>
 
-            {/* 4. CAR + DRIVER / SELF DRIVE (Light Peach/Orange) */}
+            {/* 4. VIP & LUXURY DRIVER (Light Peach/Orange) */}
             <div
               onClick={() => handleSelectCategory('VIP Driver')}
               className="bg-cardPeach-bg border border-cardPeach-border rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all cursor-pointer relative flex flex-col justify-between group"
@@ -202,10 +215,10 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
                   </div>
                   <div>
                     <h3 className="font-extrabold text-navy-900 text-base group-hover:text-orange-700 transition-colors">
-                      4. Car + Driver / Self Drive
+                      4. VIP & Luxury Driver
                     </h3>
                     <p className="text-xs text-slate-600 font-medium">
-                      Premium Cars • Location Tracking • SOS
+                      Formal Chauffeurs • High-End Vehicles
                     </p>
                   </div>
                 </div>
@@ -215,38 +228,11 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
               <div className="mt-4 pt-2">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white text-cardPeach-text border border-orange-200 shadow-xs">
                   <Car className="w-3.5 h-3.5 text-orange-600" />
-                  BMW • Audi • Mercedes etc.
+                  Luxury & Executive Cars
                 </span>
               </div>
             </div>
 
-          </div>
-        </div>
-
-        {/* PREMIUM CAR SERVICE PROMO BANNER (DARK NAVY) */}
-        <div className="bg-navy-900 text-white rounded-2xl p-5 sm:p-6 shadow-xl relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="space-y-1 text-center sm:text-left z-10">
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-400 bg-navy-800 px-2.5 py-0.5 rounded">
-              PREMIUM CAR SERVICE
-            </span>
-            <h3 className="text-xl font-black text-white">Top End Models Available</h3>
-            <p className="text-xs text-sky-200 font-medium">
-              BMW | Audi | Mercedes | Volvo | Jaguar
-            </p>
-          </div>
-
-          <div className="flex items-center gap-4 z-10">
-            <div className="bg-yellow-400 text-navy-900 p-3 rounded-2xl text-center shadow-lg shrink-0">
-              <span className="text-[10px] font-extrabold uppercase block">
-                {services.find(s => s.title === 'VIP Driver')?.minimumHours || 4} Hours Base
-              </span>
-              <span className="text-xl font-black block leading-none">
-                ₹{services.find(s => s.title === 'VIP Driver')?.startingPrice || 1000}
-              </span>
-              <span className="text-[9px] font-bold text-navy-800 block mt-0.5">
-                + ₹{services.find(s => s.title === 'VIP Driver')?.extraHourRate || 250} / Extra Hour
-              </span>
-            </div>
           </div>
         </div>
 
@@ -271,7 +257,7 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
             <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-1">
               <MapPin className="w-5 h-5" />
             </div>
-            <span className="text-[10px] font-bold text-slate-700 leading-tight">Live Location (Optional)</span>
+            <span className="text-[10px] font-bold text-slate-700 leading-tight">Distance Search</span>
           </div>
 
           <div className="flex flex-col items-center">
@@ -293,12 +279,15 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
         {/* NEARBY DRIVERS LIST SECTION */}
         <section className="pt-2">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-black text-navy-900">Drivers Near You</h2>
+            <div>
+              <h2 className="text-xl font-black text-navy-900">Drivers Near You</h2>
+              <p className="text-xs text-slate-500 font-medium">Sorted by distance from your location</p>
+            </div>
             <button
               onClick={() => navigate('/find-drivers')}
-              className="text-xs font-bold text-brand-600 hover:underline"
+              className="text-xs font-bold text-brand-600 hover:underline flex items-center gap-1"
             >
-              View Map ({drivers.length})
+              View All ({drivers.length})
             </button>
           </div>
 
