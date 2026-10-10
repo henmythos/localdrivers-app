@@ -69,5 +69,10 @@ export const bookingsService = {
   // Driver / Admin status updates
   updateStatus(id: string, status: BookingStatus): Booking | undefined {
     return dbService.updateBookingStatus(id, status);
+  },
+
+  // Driver rejects/passes or 20s timeout passes to next online driver
+  passToNextDriver(id: string): Booking | undefined {
+    return dbService.reassignBookingToNextDriver(id);
   }
 };

@@ -83,6 +83,8 @@ export interface Booking {
   status: BookingStatus;
   createdAt: string;
   updatedAt: string;
+  assignedAt?: string;
+  attemptedDriverIds?: string[];
 }
 
 export interface Review {

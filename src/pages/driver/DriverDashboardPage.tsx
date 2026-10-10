@@ -16,6 +16,7 @@ export const DriverDashboardPage: React.FC = () => {
   const [driver, setDriver] = useState<Driver | null>(null);
   const [driverBookings, setDriverBookings] = useState<Booking[]>([]);
   const [paymentSuccessMsg, setPaymentSuccessMsg] = useState<string | null>(null);
+  const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
 
   const loadData = () => {
     const state = authService.getAuthState();
@@ -33,7 +34,14 @@ export const DriverDashboardPage: React.FC = () => {
     const unsubscribe = dbService.subscribe(() => {
       loadData();
     });
-    return () => unsubscribe();
+    const timer = setInterval(() => {
+      setNowTimestamp(Date.now());
+    }, 1000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(timer);
+    };
   }, []);
 
   if (!driver) return null;
@@ -65,7 +73,7 @@ export const DriverDashboardPage: React.FC = () => {
   };
 
   const handleRejectRequest = (bookingId: string) => {
-    bookingsService.updateStatus(bookingId, 'Cancelled');
+    bookingsService.passToNextDriver(bookingId);
     loadData();
   };
 
@@ -377,72 +385,108 @@ export const DriverDashboardPage: React.FC = () => {
         {pendingRequests.length > 0 ? (
           <div className="space-y-4">
             {pendingRequests.map(req => {
-              // Mask customer phone number before driver accepts
               const cleanDigits = (req.customerPhone || '').replace(/\D/g, '');
               const maskedPhone = cleanDigits.length >= 10
                 ? `+91 ${cleanDigits.slice(-10, -6)}* *****`
                 : '+91 ***** *****';
 
+              // Calculate remaining seconds for 20s auto-pass timeout
+              const assignedTime = new Date(req.assignedAt || req.createdAt).getTime();
+              const elapsedSeconds = Math.floor((nowTimestamp - assignedTime) / 1000);
+              const remainingSec = Math.max(0, 20 - elapsedSeconds);
+              const progressPct = Math.min(100, Math.max(0, (remainingSec / 20) * 100));
+
               return (
                 <div
                   key={req.id}
-                  className="bg-white rounded-3xl p-6 border-2 border-brand-500/60 shadow-xl relative overflow-hidden space-y-4"
+                  className="bg-white rounded-3xl p-6 border-2 border-brand-500/80 shadow-2xl relative overflow-hidden space-y-4 animate-pulse-border"
                 >
-                  <div className="absolute top-0 right-0 bg-brand-600 text-white text-[10px] font-extrabold px-3 py-1 rounded-bl-xl uppercase tracking-wider">
-                    NEW DISPATCH REQUEST
+                  {/* 20-SECOND COUNTDOWN PROGRESS BAR */}
+                  <div className="absolute top-0 left-0 right-0 h-2 bg-slate-100">
+                    <div
+                      className={`h-full transition-all duration-1000 ease-linear ${
+                        remainingSec > 10
+                          ? 'bg-emerald-500'
+                          : remainingSec > 5
+                          ? 'bg-amber-500'
+                          : 'bg-red-600'
+                      }`}
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="font-mono font-extrabold text-xs text-brand-700">{req.id}</span>
+                    
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 animate-pulse">
+                        <Clock className="w-3 h-3" />
+                        Auto-Pass in {remainingSec}s
+                      </span>
+                      <span className="bg-brand-600 text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
+                        {req.serviceTitle}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                      <span className="font-mono font-bold text-xs text-brand-700">{req.id}</span>
-                      <h3 className="font-black text-slate-900 text-lg mt-0.5">{req.customerName}</h3>
+                      <h3 className="font-black text-slate-900 text-xl">{req.customerName}</h3>
                       
                       {/* MASKED PHONE NOTICE BEFORE ACCEPTANCE */}
                       <div className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 text-amber-900 border border-amber-200/80 text-xs font-mono font-bold">
                         <Lock className="w-3.5 h-3.5 text-amber-600" />
                         <span>Mobile: {maskedPhone}</span>
                         <span className="text-[10px] text-amber-700 font-sans font-normal ml-1">
-                          (Hidden until accepted)
+                          (Unlocked on acceptance)
                         </span>
                       </div>
                     </div>
 
                     <div className="text-left md:text-right">
                       <span className="text-[10px] text-slate-400 font-bold uppercase block">Estimated Fare</span>
-                      <span className="text-2xl font-black text-emerald-600">₹{req.estimatedFare}</span>
+                      <span className="text-3xl font-black text-emerald-600">₹{req.estimatedFare}</span>
                     </div>
                   </div>
 
                   {/* ROUTE & VEHICLE DETAILS ("FROM WHERE TO WHERE & WHICH CAR") */}
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2.5 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3 text-xs">
                     
-                    {/* FROM WHERE */}
-                    <div className="flex items-start gap-2">
-                      <MapPin className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
+                    {/* FROM WHERE (PICKUP) */}
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center shrink-0 font-extrabold text-[11px] mt-0.5">
+                        A
+                      </div>
                       <div>
-                        <span className="font-bold text-slate-900 uppercase text-[10px] block text-brand-700">Pickup Location (From Where):</span>
-                        <span className="font-semibold text-slate-800 text-xs">{req.pickupLocation}</span>
+                        <span className="font-extrabold text-slate-900 uppercase text-[10px] block text-brand-700 tracking-wider">
+                          Pickup Location (From Where):
+                        </span>
+                        <span className="font-bold text-slate-900 text-xs">{req.pickupLocation}</span>
                       </div>
                     </div>
 
-                    {/* TO WHERE */}
-                    <div className="flex items-start gap-2">
-                      <Navigation className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    {/* TO WHERE (DESTINATION) */}
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 font-extrabold text-[11px] mt-0.5">
+                        B
+                      </div>
                       <div>
-                        <span className="font-bold text-slate-900 uppercase text-[10px] block text-emerald-700">Destination (To Where):</span>
-                        <span className="font-semibold text-slate-800 text-xs">{req.destinationLocation}</span>
+                        <span className="font-extrabold text-slate-900 uppercase text-[10px] block text-emerald-700 tracking-wider">
+                          Destination (To Where):
+                        </span>
+                        <span className="font-bold text-slate-900 text-xs">{req.destinationLocation}</span>
                       </div>
                     </div>
 
                     {/* WHICH CAR HE NEEDS TO DRIVE */}
-                    <div className="flex items-start gap-2 pt-2 border-t border-slate-200/60 bg-purple-50/60 p-3 rounded-xl border-purple-100">
+                    <div className="flex items-start gap-2.5 pt-2 border-t border-slate-200/60 bg-purple-50/70 p-3 rounded-xl border-purple-100">
                       <Car className="w-4.5 h-4.5 text-purple-700 shrink-0 mt-0.5" />
                       <div>
                         <span className="font-extrabold text-purple-900 uppercase text-[10px] block">
-                          Vehicle / Car Details (Which Car To Drive):
+                          Vehicle / Booking Type:
                         </span>
-                        <span className="font-bold text-slate-800">
-                          {req.notes ? req.notes : `Customer Personal Vehicle (${req.serviceTitle})`}
+                        <span className="font-bold text-slate-900">
+                          {req.serviceTitle} — {req.notes ? req.notes : 'Customer Personal Vehicle'}
                         </span>
                       </div>
                     </div>
@@ -450,32 +494,32 @@ export const DriverDashboardPage: React.FC = () => {
                     <div className="flex flex-wrap items-center gap-4 text-slate-600 pt-2 border-t border-slate-200/60 text-[11px]">
                       <span>Date: <strong className="text-slate-900">{req.date}</strong></span>
                       <span>Reporting Time: <strong className="text-slate-900">{req.time}</strong></span>
-                      <span>Category: <strong className="text-brand-700">{req.serviceTitle}</strong></span>
+                      <span>Status: <strong className="text-amber-600 uppercase font-extrabold">Pending Acceptance</strong></span>
                     </div>
                   </div>
 
-                  {/* PRIVACY NOTICE & ACCEPT / REJECT ACTION BUTTONS */}
+                  {/* PRIVACY NOTICE & ACCEPT / PASS ACTION BUTTONS */}
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
                     <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
                       <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Accepting this ride will immediately reveal customer phone number & call link.</span>
+                      <span>Accepting this ride will unlock customer mobile number & location.</span>
                     </p>
 
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         onClick={() => handleRejectRequest(req.id)}
-                        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5"
+                        className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-700 font-extrabold text-xs rounded-xl border border-red-200 transition-colors flex items-center gap-1.5"
                       >
-                        <XCircle className="w-4 h-4 text-slate-500" />
-                        Reject
+                        <XCircle className="w-4 h-4 text-red-600" />
+                        Pass to Next Driver
                       </button>
 
                       <button
                         onClick={() => handleAcceptRequest(req.id)}
-                        className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2"
+                        className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2"
                       >
                         <CheckCircle2 className="w-4 h-4" />
-                        Accept & Reveal Phone
+                        Accept Ride ({remainingSec}s)
                       </button>
                     </div>
                   </div>

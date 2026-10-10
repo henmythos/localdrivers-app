@@ -130,6 +130,27 @@ class DatabaseService {
 
   constructor() {
     this.initDatabase();
+    this.startAutoReassignmentEngine();
+  }
+
+  private startAutoReassignmentEngine() {
+    if (typeof window === 'undefined') return;
+    setInterval(() => {
+      const bookings = this.getBookings();
+      const now = Date.now();
+      let changed = false;
+
+      bookings.forEach(b => {
+        if (b.status === 'Pending') {
+          const assignedTime = new Date(b.assignedAt || b.createdAt).getTime();
+          const elapsed = (now - assignedTime) / 1000;
+          if (elapsed >= 20) {
+            this.reassignBookingToNextDriver(b.id);
+            changed = true;
+          }
+        }
+      });
+    }, 2000);
   }
 
   private initDatabase() {
@@ -385,22 +406,91 @@ class DatabaseService {
     const newId = `LD-2026-${String(count).padStart(4, '0')}`;
     const now = new Date().toISOString();
 
-    const targetDriver = this.getDriverById(bookingData.driverId);
+    let targetDriver = this.getDriverById(bookingData.driverId);
+
+    // Verify driver is online & active; if not, automatically pick the nearest available online driver
+    if (!targetDriver || !targetDriver.isOnline || targetDriver.isHold || targetDriver.status !== 'Approved') {
+      const onlineDrivers = this.getApprovedDrivers()
+        .filter(d => d.isOnline && !d.isHold && d.status === 'Approved')
+        .sort((a, b) => a.distanceKm - b.distanceKm);
+      
+      if (onlineDrivers.length > 0) {
+        targetDriver = onlineDrivers[0];
+      }
+    }
+
+    const assignedDriverId = targetDriver?.id || bookingData.driverId;
+    const driverName = targetDriver?.name || bookingData.driverName;
+    const driverPhoto = targetDriver?.photo || bookingData.driverPhoto;
+    const driverPhone = targetDriver?.phone || bookingData.driverPhone;
     const driverCode = targetDriver?.driverCode || generateDriverCode();
 
     const newBooking: Booking = {
       ...bookingData,
       id: newId,
+      driverId: assignedDriverId,
+      driverName,
+      driverPhoto,
+      driverPhone,
       driverCode,
       status: 'Pending',
       createdAt: now,
       updatedAt: now,
+      assignedAt: now,
+      attemptedDriverIds: [assignedDriverId],
     };
 
     bookings.unshift(newBooking);
     localStorage.setItem(this.bookingsKey, JSON.stringify(bookings));
     this.notify();
     return newBooking;
+  }
+
+  public reassignBookingToNextDriver(bookingId: string): Booking | undefined {
+    const bookings = this.getBookings();
+    const index = bookings.findIndex(b => b.id === bookingId);
+    if (index === -1) return undefined;
+
+    const booking = bookings[index];
+    if (booking.status !== 'Pending') return booking;
+
+    const attempted = [...(booking.attemptedDriverIds || [])];
+    if (!attempted.includes(booking.driverId)) {
+      attempted.push(booking.driverId);
+    }
+
+    // Find candidate online drivers who are approved, online, not on hold, and not attempted yet
+    const approvedDrivers = this.getApprovedDrivers();
+    const onlineCandidates = approvedDrivers
+      .filter(d => d.isOnline && !d.isHold && d.status === 'Approved' && !attempted.includes(d.id))
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+
+    const nowIso = new Date().toISOString();
+
+    if (onlineCandidates.length > 0) {
+      const nextDriver = onlineCandidates[0];
+      attempted.push(nextDriver.id);
+
+      bookings[index].driverId = nextDriver.id;
+      bookings[index].driverName = nextDriver.name;
+      bookings[index].driverPhoto = nextDriver.photo;
+      bookings[index].driverPhone = nextDriver.phone;
+      bookings[index].driverCode = nextDriver.driverCode;
+      bookings[index].assignedAt = nowIso;
+      bookings[index].updatedAt = nowIso;
+      bookings[index].attemptedDriverIds = attempted;
+
+      localStorage.setItem(this.bookingsKey, JSON.stringify(bookings));
+      this.notify();
+      return bookings[index];
+    } else {
+      // Reset timer & allow existing online drivers to get another chance if still pending
+      bookings[index].assignedAt = nowIso;
+      bookings[index].attemptedDriverIds = [booking.driverId];
+      localStorage.setItem(this.bookingsKey, JSON.stringify(bookings));
+      this.notify();
+      return bookings[index];
+    }
   }
 
   public updateBookingStatus(id: string, status: Booking['status']): Booking | undefined {
