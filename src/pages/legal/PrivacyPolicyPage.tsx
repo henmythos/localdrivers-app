@@ -48,7 +48,7 @@ export const PrivacyPolicyPage: React.FC = () => {
             </h2>
             <ul className="list-disc pl-5 space-y-1">
               <li><strong>Customer Information:</strong> Full Name, Mobile Number, Pickup and Destination Locations, Booking dates/times, and optional special notes. No login account is required for customers.</li>
-              <li><strong>Driver Partner Information:</strong> Full Name, Mobile Number (User ID & Password), Driving Licence details, Police Verification records, Identity proofs, Operating localities, and vehicle experience categories.</li>
+              <li><strong>Driver Partner Information:</strong> Full Name, Mobile Number (User ID & Password), Driving Licence details, Aadhaar Card KYC records, Profile Selfie photo, Operating localities, and vehicle experience categories.</li>
               <li><strong>Device & Geolocation Data:</strong> Optional GPS location data used exclusively to show nearby Hyderabad drivers and compute trip distances.</li>
             </ul>
           </section>

@@ -57,7 +57,7 @@ export const DataDeletionPage: React.FC = () => {
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 space-y-2 text-xs leading-relaxed">
               <span className="font-bold text-slate-900 block">What Data Will Be Purged:</span>
               <ul className="list-disc pl-5 space-y-1">
-                <li>Driver Profile, Registered Mobile Number, Licence records & Police Verification documents.</li>
+                <li>Driver Profile, Registered Mobile Number, Aadhaar & Driving Licence documents.</li>
                 <li>Customer booking history linked to your mobile phone number.</li>
                 <li>All profile status entries and cached tokens.</li>
               </ul>

@@ -46,7 +46,7 @@ export const AboutPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
                 <span className="font-extrabold text-slate-900 block">100% Background Verified</span>
-                <span className="text-xs text-slate-500">Every driver passes police verification and licence authentication.</span>
+                <span className="text-xs text-slate-500">Every driver undergoes Aadhaar identity and driving licence authentication.</span>
               </div>
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
                 <span className="font-extrabold text-slate-900 block">Transparent 3-5% Fee</span>
