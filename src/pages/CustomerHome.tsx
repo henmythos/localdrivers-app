@@ -382,13 +382,14 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
               </p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2 gap-x-8 text-xs font-bold text-slate-700">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-2 gap-x-8 text-xs font-bold text-slate-700">
               <Link to="/about" className="hover:text-brand-600 transition-colors">About Us</Link>
               <Link to="/contact" className="hover:text-brand-600 transition-colors">Contact Support</Link>
               <Link to="/privacy" className="hover:text-brand-600 transition-colors">Privacy Policy</Link>
               <Link to="/terms" className="hover:text-brand-600 transition-colors">Terms of Service</Link>
               <Link to="/cancellation" className="hover:text-brand-600 transition-colors">Cancellation Policy</Link>
               <Link to="/data-deletion" className="hover:text-red-600 transition-colors">Data Deletion</Link>
+              <Link to="/admin/login" className="hover:text-purple-600 transition-colors flex items-center gap-1">Admin Portal</Link>
             </div>
           </div>
 

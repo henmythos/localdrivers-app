@@ -88,12 +88,30 @@ export const authService = {
   // Admin Login
   loginAdmin(username: string, password?: string): { success: boolean; error?: string } {
     const cleanUser = username.trim().toLowerCase();
+    const cleanPass = (password || '').trim();
+
     if (!cleanUser) {
       return { success: false, error: 'User ID is required' };
     }
 
-    if (password && (cleanUser === 'ranjith.ceo' || cleanUser === 'ranjith') && password !== 'ranjith@2026') {
-      return { success: false, error: 'Incorrect password for Ranjith.ceo' };
+    if (!cleanPass) {
+      return { success: false, error: 'Password is required' };
+    }
+
+    // Valid admin credentials: Ranjith.ceo / Ranjith@2026
+    const isRanjith = cleanUser === 'ranjith.ceo' || cleanUser === 'ranjith';
+    const isLegacyAdmin = cleanUser === 'admin';
+
+    if (isRanjith) {
+      if (cleanPass.toLowerCase() !== 'ranjith@2026') {
+        return { success: false, error: 'Incorrect password for Ranjith.ceo' };
+      }
+    } else if (isLegacyAdmin) {
+      if (cleanPass !== 'admin123' && cleanPass.toLowerCase() !== 'ranjith@2026') {
+        return { success: false, error: 'Incorrect password for admin' };
+      }
+    } else {
+      return { success: false, error: 'Invalid Admin User ID. Use: Ranjith.ceo' };
     }
 
     localStorage.setItem(ADMIN_AUTH_KEY, 'true');
