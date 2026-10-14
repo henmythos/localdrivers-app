@@ -12,7 +12,14 @@ export type BookingStatus = 'Pending' | 'Accepted' | 'Driver Arriving' | 'Comple
 
 export interface DocumentItem {
   id: string;
-  type: 'Profile Photo Selfie' | 'Aadhaar Card' | 'Driving Licence';
+  type: 
+    | 'Profile Photo Selfie' 
+    | 'Aadhaar Card' // legacy backwards-compatible
+    | 'Aadhaar Card (Front)' 
+    | 'Aadhaar Card (Back)' 
+    | 'Driving Licence' // legacy backwards-compatible
+    | 'Driving Licence (Front)' 
+    | 'Driving Licence (Back)';
   status: 'Verified' | 'Under Review' | 'Rejected' | 'Not Uploaded';
   url?: string;
   rejectionReason?: string;

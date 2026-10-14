@@ -35,8 +35,10 @@ export const DriverRegisterPage: React.FC = () => {
 
   // Document Uploads State
   const [photoSelfieUrl, setPhotoSelfieUrl] = useState<string>('');
-  const [aadhaarUrl, setAadhaarUrl] = useState<string>('');
-  const [licenseUrl, setLicenseUrl] = useState<string>('');
+  const [aadhaarFrontUrl, setAadhaarFrontUrl] = useState<string>('');
+  const [aadhaarBackUrl, setAadhaarBackUrl] = useState<string>('');
+  const [licenseFrontUrl, setLicenseFrontUrl] = useState<string>('');
+  const [licenseBackUrl, setLicenseBackUrl] = useState<string>('');
 
   // Live Camera Modal State
   const [activeCameraModal, setActiveCameraModal] = useState<{
@@ -86,17 +88,27 @@ export const DriverRegisterPage: React.FC = () => {
     }
 
     if (!photoSelfieUrl) {
-      setError('Please upload your Profile Photo Selfie');
+      setError('Please upload or capture your Profile Photo Selfie');
       return;
     }
 
-    if (!aadhaarUrl) {
-      setError('Please upload your Aadhaar Card document for Admin KYC verification');
+    if (!aadhaarFrontUrl) {
+      setError('Please upload or capture the Front side of your Aadhaar Card');
       return;
     }
 
-    if (!licenseUrl) {
-      setError('Please upload your Driving Licence (DL) document for Admin verification');
+    if (!aadhaarBackUrl) {
+      setError('Please upload or capture the Back side of your Aadhaar Card');
+      return;
+    }
+
+    if (!licenseFrontUrl) {
+      setError('Please upload or capture the Front side of your Driving Licence');
+      return;
+    }
+
+    if (!licenseBackUrl) {
+      setError('Please upload or capture the Back side of your Driving Licence');
       return;
     }
 
@@ -112,8 +124,10 @@ export const DriverRegisterPage: React.FC = () => {
       vehicleCategories: selectedVehicles,
       description: formData.description.trim() || 'Professional driver registered on Localdrivers platform.',
       photoUrl: photoSelfieUrl,
-      aadhaarUrl: aadhaarUrl,
-      licenseUrl: licenseUrl,
+      aadhaarFrontUrl: aadhaarFrontUrl,
+      aadhaarBackUrl: aadhaarBackUrl,
+      licenseFrontUrl: licenseFrontUrl,
+      licenseBackUrl: licenseBackUrl,
     });
 
     setSubmittedPhone(formData.phone.trim());
@@ -380,159 +394,306 @@ export const DriverRegisterPage: React.FC = () => {
             <div>
               <h2 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                 <FileText className="w-4 h-4 text-purple-600" />
-                Mandatory Document Verification (Cloudflare R2 Storage)
+                Mandatory KYC Document Verification (Two Sides Required)
               </h2>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Profile selfie is displayed on your driver card. Aadhaar and DL are stored securely in Cloudflare R2 and viewed ONLY by Admin for verification.
+                Profile selfie is displayed on your driver card. Aadhaar Card (Front & Back) and Driving Licence (Front & Back) are stored securely on Cloudflare R2 and inspected ONLY by Admin.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-4">
               
               {/* 1. Profile Photo Selfie */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 hover:border-brand-300 transition-colors flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
+              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 hover:border-brand-300 transition-colors">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
                     <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                       <Camera className="w-3.5 h-3.5 text-brand-600" />
-                      Profile Selfie *
+                      Profile Photo Selfie *
                     </span>
-                    <span className="text-[9px] font-extrabold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
-                      Public Visible
-                    </span>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Live front selfie photo shown to customers on booking</p>
+                  </div>
+                  <span className="text-[9px] font-extrabold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full shrink-0">
+                    Public Visible
+                  </span>
+                </div>
+
+                {photoSelfieUrl ? (
+                  <div className="relative group max-w-xs">
+                    <img src={photoSelfieUrl} alt="Selfie preview" className="w-full h-36 object-cover rounded-xl border border-slate-200" />
+                    <button
+                      type="button"
+                      onClick={() => setPhotoSelfieUrl('')}
+                      className="absolute top-2 right-2 bg-slate-900/80 hover:bg-slate-900 text-white text-[10px] font-bold px-2.5 py-1 rounded-md backdrop-blur-sm transition-colors"
+                    >
+                      Change Photo
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-md">
+                    <button
+                      type="button"
+                      onClick={() => setActiveCameraModal({
+                        docTitle: 'Profile Photo Selfie',
+                        docType: 'selfie',
+                        targetSetter: setPhotoSelfieUrl,
+                      })}
+                      className="py-3 px-3 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Camera className="w-4 h-4" />
+                      Capture Live Selfie
+                    </button>
+
+                    <label className="border border-dashed border-slate-300 hover:border-brand-400 bg-white rounded-xl py-3 px-3 flex items-center justify-center gap-1.5 cursor-pointer text-center transition-colors">
+                      <UploadCloud className="w-4 h-4 text-slate-500" />
+                      <span className="text-[11px] font-bold text-slate-700">Choose from Gallery</span>
+                      <input type="file" accept="image/*" onChange={e => handleFileUpload(e, setPhotoSelfieUrl)} className="hidden" />
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Aadhaar Card (Two Sides: Front & Back) */}
+              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-purple-200/80 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center text-purple-700 shrink-0">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-extrabold text-slate-900 block">
+                        Aadhaar Card Verification (Two Sides Required) *
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Upload or capture clear photos of both Front (Photo/DOB) and Back (Address) sides
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-extrabold bg-purple-100 text-purple-800 px-2.5 py-0.5 rounded-full shrink-0 self-start sm:self-auto">
+                    Admin Only
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Aadhaar Front */}
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-purple-600" />
+                        Aadhaar - Front Side *
+                      </span>
+                      {aadhaarFrontUrl && (
+                        <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Ready
+                        </span>
+                      )}
+                    </div>
+
+                    {aadhaarFrontUrl ? (
+                      <div className="relative group">
+                        <img src={aadhaarFrontUrl} alt="Aadhaar Front preview" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
+                        <button
+                          type="button"
+                          onClick={() => setAadhaarFrontUrl('')}
+                          className="absolute top-1.5 right-1.5 bg-slate-900/80 hover:bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm transition-colors"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveCameraModal({
+                            docTitle: 'Aadhaar Card (Front Side)',
+                            docType: 'document',
+                            targetSetter: setAadhaarFrontUrl,
+                          })}
+                          className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <Camera className="w-4 h-4" />
+                          Capture Front Camera
+                        </button>
+
+                        <label className="border border-dashed border-slate-300 hover:border-purple-400 bg-slate-50 rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 cursor-pointer text-center transition-colors">
+                          <FileText className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="text-[11px] font-bold text-slate-700">Choose Front File</span>
+                          <input type="file" accept="image/*,.pdf" onChange={e => handleFileUpload(e, setAadhaarFrontUrl)} className="hidden" />
+                        </label>
+                      </div>
+                    )}
                   </div>
 
-                  {photoSelfieUrl ? (
-                    <div className="relative group">
-                      <img src={photoSelfieUrl} alt="Selfie preview" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
-                      <button
-                        type="button"
-                        onClick={() => setPhotoSelfieUrl('')}
-                        className="absolute top-1.5 right-1.5 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm"
-                      >
-                        Change
-                      </button>
+                  {/* Aadhaar Back */}
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-purple-600" />
+                        Aadhaar - Back Side *
+                      </span>
+                      {aadhaarBackUrl && (
+                        <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Ready
+                        </span>
+                      )}
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => setActiveCameraModal({
-                          docTitle: 'Profile Photo Selfie',
-                          docType: 'selfie',
-                          targetSetter: setPhotoSelfieUrl,
-                        })}
-                        className="w-full py-3 px-3 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        <Camera className="w-4 h-4" />
-                        Capture Live Selfie
-                      </button>
 
-                      <label className="border border-dashed border-slate-300 hover:border-brand-400 bg-white rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 cursor-pointer text-center">
-                        <UploadCloud className="w-4 h-4 text-slate-500" />
-                        <span className="text-[11px] font-bold text-slate-700">Choose from Gallery</span>
-                        <input type="file" accept="image/*" onChange={e => handleFileUpload(e, setPhotoSelfieUrl)} className="hidden" />
-                      </label>
-                    </div>
-                  )}
+                    {aadhaarBackUrl ? (
+                      <div className="relative group">
+                        <img src={aadhaarBackUrl} alt="Aadhaar Back preview" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
+                        <button
+                          type="button"
+                          onClick={() => setAadhaarBackUrl('')}
+                          className="absolute top-1.5 right-1.5 bg-slate-900/80 hover:bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm transition-colors"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveCameraModal({
+                            docTitle: 'Aadhaar Card (Back Side)',
+                            docType: 'document',
+                            targetSetter: setAadhaarBackUrl,
+                          })}
+                          className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <Camera className="w-4 h-4" />
+                          Capture Back Camera
+                        </button>
+
+                        <label className="border border-dashed border-slate-300 hover:border-purple-400 bg-slate-50 rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 cursor-pointer text-center transition-colors">
+                          <FileText className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="text-[11px] font-bold text-slate-700">Choose Back File</span>
+                          <input type="file" accept="image/*,.pdf" onChange={e => handleFileUpload(e, setAadhaarBackUrl)} className="hidden" />
+                        </label>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* 2. Aadhaar Card Document */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 hover:border-purple-300 transition-colors flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5 text-purple-600" />
-                      Aadhaar Card *
-                    </span>
-                    <span className="text-[9px] font-extrabold bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded">
-                      Admin Only
-                    </span>
+              {/* 3. Driving Licence (Two Sides: Front & Back) */}
+              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-emerald-200/80 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-extrabold text-slate-900 block">
+                        Driving Licence (DL) Verification (Two Sides Required) *
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Upload or capture clear photos of both Front (DL No & Validity) and Back (Vehicle Classes) sides
+                      </span>
+                    </div>
                   </div>
-
-                  {aadhaarUrl ? (
-                    <div className="relative group">
-                      <img src={aadhaarUrl} alt="Aadhaar preview" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
-                      <button
-                        type="button"
-                        onClick={() => setAadhaarUrl('')}
-                        className="absolute top-1.5 right-1.5 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm"
-                      >
-                        Change
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => setActiveCameraModal({
-                          docTitle: 'Aadhaar Card Document',
-                          docType: 'document',
-                          targetSetter: setAadhaarUrl,
-                        })}
-                        className="w-full py-3 px-3 bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        <Camera className="w-4 h-4" />
-                        Capture Aadhaar Camera
-                      </button>
-
-                      <label className="border border-dashed border-slate-300 hover:border-purple-400 bg-white rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 cursor-pointer text-center">
-                        <FileText className="w-4 h-4 text-slate-500" />
-                        <span className="text-[11px] font-bold text-slate-700">Choose from Files</span>
-                        <input type="file" accept="image/*,.pdf" onChange={e => handleFileUpload(e, setAadhaarUrl)} className="hidden" />
-                      </label>
-                    </div>
-                  )}
+                  <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full shrink-0 self-start sm:self-auto">
+                    Admin Only
+                  </span>
                 </div>
-              </div>
 
-              {/* 3. Driving Licence (DL) Document */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 hover:border-emerald-300 transition-colors flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5 text-emerald-600" />
-                      Driving Licence *
-                    </span>
-                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                      Admin Only
-                    </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* DL Front */}
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                        DL - Front Side *
+                      </span>
+                      {licenseFrontUrl && (
+                        <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Ready
+                        </span>
+                      )}
+                    </div>
+
+                    {licenseFrontUrl ? (
+                      <div className="relative group">
+                        <img src={licenseFrontUrl} alt="DL Front preview" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
+                        <button
+                          type="button"
+                          onClick={() => setLicenseFrontUrl('')}
+                          className="absolute top-1.5 right-1.5 bg-slate-900/80 hover:bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm transition-colors"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveCameraModal({
+                            docTitle: 'Driving Licence (Front Side)',
+                            docType: 'document',
+                            targetSetter: setLicenseFrontUrl,
+                          })}
+                          className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <Camera className="w-4 h-4" />
+                          Capture Front Camera
+                        </button>
+
+                        <label className="border border-dashed border-slate-300 hover:border-emerald-400 bg-slate-50 rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 cursor-pointer text-center transition-colors">
+                          <FileText className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="text-[11px] font-bold text-slate-700">Choose Front File</span>
+                          <input type="file" accept="image/*,.pdf" onChange={e => handleFileUpload(e, setLicenseFrontUrl)} className="hidden" />
+                        </label>
+                      </div>
+                    )}
                   </div>
 
-                  {licenseUrl ? (
-                    <div className="relative group">
-                      <img src={licenseUrl} alt="DL preview" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
-                      <button
-                        type="button"
-                        onClick={() => setLicenseUrl('')}
-                        className="absolute top-1.5 right-1.5 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm"
-                      >
-                        Change
-                      </button>
+                  {/* DL Back */}
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                        DL - Back Side *
+                      </span>
+                      {licenseBackUrl && (
+                        <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Ready
+                        </span>
+                      )}
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => setActiveCameraModal({
-                          docTitle: 'Driving Licence (DL)',
-                          docType: 'document',
-                          targetSetter: setLicenseUrl,
-                        })}
-                        className="w-full py-3 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        <Camera className="w-4 h-4" />
-                        Capture DL Camera
-                      </button>
 
-                      <label className="border border-dashed border-slate-300 hover:border-emerald-400 bg-white rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 cursor-pointer text-center">
-                        <FileText className="w-4 h-4 text-slate-500" />
-                        <span className="text-[11px] font-bold text-slate-700">Choose from Files</span>
-                        <input type="file" accept="image/*,.pdf" onChange={e => handleFileUpload(e, setLicenseUrl)} className="hidden" />
-                      </label>
-                    </div>
-                  )}
+                    {licenseBackUrl ? (
+                      <div className="relative group">
+                        <img src={licenseBackUrl} alt="DL Back preview" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
+                        <button
+                          type="button"
+                          onClick={() => setLicenseBackUrl('')}
+                          className="absolute top-1.5 right-1.5 bg-slate-900/80 hover:bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm transition-colors"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveCameraModal({
+                            docTitle: 'Driving Licence (Back Side)',
+                            docType: 'document',
+                            targetSetter: setLicenseBackUrl,
+                          })}
+                          className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <Camera className="w-4 h-4" />
+                          Capture Back Camera
+                        </button>
+
+                        <label className="border border-dashed border-slate-300 hover:border-emerald-400 bg-slate-50 rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 cursor-pointer text-center transition-colors">
+                          <FileText className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="text-[11px] font-bold text-slate-700">Choose Back File</span>
+                          <input type="file" accept="image/*,.pdf" onChange={e => handleFileUpload(e, setLicenseBackUrl)} className="hidden" />
+                        </label>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

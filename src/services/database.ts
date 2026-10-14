@@ -337,6 +337,10 @@ class DatabaseService {
     vehicleCategories: string[];
     description?: string;
     photoUrl?: string;
+    aadhaarFrontUrl?: string;
+    aadhaarBackUrl?: string;
+    licenseFrontUrl?: string;
+    licenseBackUrl?: string;
     aadhaarUrl?: string;
     licenseUrl?: string;
   }): Driver {
@@ -346,8 +350,10 @@ class DatabaseService {
     const today = new Date().toISOString().split('T')[0];
 
     const defaultSelfie = input.photoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=400';
-    const defaultAadhaar = input.aadhaarUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=800';
-    const defaultDL = input.licenseUrl || 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&q=80&w=800';
+    const defaultAadhaarFront = input.aadhaarFrontUrl || input.aadhaarUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=800';
+    const defaultAadhaarBack = input.aadhaarBackUrl || input.aadhaarUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=800';
+    const defaultDLFront = input.licenseFrontUrl || input.licenseUrl || 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&q=80&w=800';
+    const defaultDLBack = input.licenseBackUrl || input.licenseUrl || 'https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&q=80&w=800';
 
     const newDriver: Driver = {
       id: newId,
@@ -373,8 +379,10 @@ class DatabaseService {
       verificationBadge: false,
       documents: [
         { id: `doc-${Date.now()}-1`, type: 'Profile Photo Selfie', status: 'Under Review', url: defaultSelfie, uploadedAt: today },
-        { id: `doc-${Date.now()}-2`, type: 'Aadhaar Card', status: 'Under Review', url: defaultAadhaar, uploadedAt: today },
-        { id: `doc-${Date.now()}-3`, type: 'Driving Licence', status: 'Under Review', url: defaultDL, uploadedAt: today },
+        { id: `doc-${Date.now()}-2`, type: 'Aadhaar Card (Front)', status: 'Under Review', url: defaultAadhaarFront, uploadedAt: today },
+        { id: `doc-${Date.now()}-3`, type: 'Aadhaar Card (Back)', status: 'Under Review', url: defaultAadhaarBack, uploadedAt: today },
+        { id: `doc-${Date.now()}-4`, type: 'Driving Licence (Front)', status: 'Under Review', url: defaultDLFront, uploadedAt: today },
+        { id: `doc-${Date.now()}-5`, type: 'Driving Licence (Back)', status: 'Under Review', url: defaultDLBack, uploadedAt: today },
       ],
       description: input.description || 'Newly registered driver partner. Awaiting document verification by Admin.',
       joinedDate: today,
