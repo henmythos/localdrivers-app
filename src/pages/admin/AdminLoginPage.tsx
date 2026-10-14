@@ -64,7 +64,7 @@ export const AdminLoginPage: React.FC = () => {
                 required
                 value={username}
                 onChange={e => setUsername(e.target.value)}
-                placeholder="Enter User ID (e.g. Ranjith.ceo)"
+                placeholder="Enter Admin User ID"
                 className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-purple-500 text-xs font-bold"
               />
             </div>

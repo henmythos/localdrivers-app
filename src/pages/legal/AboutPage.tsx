@@ -69,7 +69,7 @@ export const AboutPage: React.FC = () => {
               Leadership & Headquarters
             </h2>
             <p>
-              Localdrivers is led by <strong>Admin Ranjith (CEO)</strong> and headquartered in Jubilee Hills, Hyderabad.
+              Localdrivers is headquartered in Jubilee Hills, Hyderabad, delivering premier on-demand chauffeur and driver dispatch services across Telangana.
             </p>
             <div className="p-4 bg-slate-900 text-white rounded-2xl text-xs space-y-1 font-mono">
               <p>Portal: https://localdrivers.in</p>

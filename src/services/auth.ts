@@ -57,7 +57,7 @@ export const authService = {
       if (found.status === 'Pending') {
         return { 
           success: false, 
-          error: `Your driver profile (${found.name}) is currently pending approval by Admin (Ranjith.ceo). Once approved, you can log in.` 
+          error: `Your driver profile (${found.name}) is currently under verification review. Once approved, you can log in.` 
         };
       }
 
@@ -90,28 +90,15 @@ export const authService = {
     const cleanUser = username.trim().toLowerCase();
     const cleanPass = (password || '').trim();
 
-    if (!cleanUser) {
-      return { success: false, error: 'User ID is required' };
+    if (!cleanUser || !cleanPass) {
+      return { success: false, error: 'User ID and Password are required' };
     }
 
-    if (!cleanPass) {
-      return { success: false, error: 'Password is required' };
-    }
+    const isAuthorizedUser = cleanUser === 'ranjith.ceo' || cleanUser === 'ranjith' || cleanUser === 'admin';
+    const isAuthorizedPass = cleanPass.toLowerCase() === 'ranjith@2026' || (cleanUser === 'admin' && cleanPass === 'admin123');
 
-    // Valid admin credentials: Ranjith.ceo / Ranjith@2026
-    const isRanjith = cleanUser === 'ranjith.ceo' || cleanUser === 'ranjith';
-    const isLegacyAdmin = cleanUser === 'admin';
-
-    if (isRanjith) {
-      if (cleanPass.toLowerCase() !== 'ranjith@2026') {
-        return { success: false, error: 'Incorrect password for Ranjith.ceo' };
-      }
-    } else if (isLegacyAdmin) {
-      if (cleanPass !== 'admin123' && cleanPass.toLowerCase() !== 'ranjith@2026') {
-        return { success: false, error: 'Incorrect password for admin' };
-      }
-    } else {
-      return { success: false, error: 'Invalid Admin User ID. Use: Ranjith.ceo' };
+    if (!isAuthorizedUser || !isAuthorizedPass) {
+      return { success: false, error: 'Invalid administrator credentials' };
     }
 
     localStorage.setItem(ADMIN_AUTH_KEY, 'true');

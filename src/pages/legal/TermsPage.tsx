@@ -57,7 +57,7 @@ export const TermsPage: React.FC = () => {
               3. Verification & Driver Conduct
             </h2>
             <p>
-              All driver partners must possess a valid Indian Commercial/Transport Driving Licence and undergo identity and background check validation by Admin (Ranjith.ceo). Drivers are required to maintain strict professionalism, non-smoking standards, and traffic safety compliance.
+              All driver partners must possess a valid Indian Commercial/Transport Driving Licence and undergo identity and background check validation by the platform compliance authority. Drivers are required to maintain strict professionalism, non-smoking standards, and traffic safety compliance.
             </p>
           </section>
 

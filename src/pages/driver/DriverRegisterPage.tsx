@@ -146,7 +146,7 @@ export const DriverRegisterPage: React.FC = () => {
             <h1 className="text-2xl font-black text-slate-900">Application Submitted!</h1>
             <p className="text-xs text-slate-600 mt-2 leading-relaxed">
               Your driver partner profile has been registered and is now under verification review by 
-              <span className="font-bold text-slate-800"> Admin (Ranjith.ceo)</span>.
+              <span className="font-bold text-slate-800"> the platform verification team</span>.
             </p>
           </div>
 
@@ -167,11 +167,11 @@ export const DriverRegisterPage: React.FC = () => {
               </span>
             </div>
             <p className="text-[11px] text-slate-500 italic mt-1">
-              Once Admin approves your documents in the dashboard, your profile will be active for customer searches.
+              Once your documents are verified and approved, your profile will be active for customer bookings.
             </p>
           </div>
 
-          <div className="pt-2 space-y-3">
+          <div className="pt-2">
             <button
               onClick={() => navigate('/driver/login')}
               className="w-full py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
@@ -179,12 +179,6 @@ export const DriverRegisterPage: React.FC = () => {
               Go to Driver Partner Login
               <ArrowRight className="w-4 h-4" />
             </button>
-            <Link
-              to="/admin/drivers/pending"
-              className="block text-center text-xs font-bold text-slate-500 hover:text-brand-600"
-            >
-              View Admin Approvals Queue (Ranjith.ceo Demo)
-            </Link>
           </div>
         </div>
       </div>
