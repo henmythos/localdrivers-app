@@ -86,23 +86,6 @@ export const AdminBookingsPage: React.FC = () => {
             </button>
           )}
         </div>
-
-        {/* Quick Suggestion Pills */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-          <span className="text-[11px] text-slate-500 font-medium">Quick Demo Filters:</span>
-          <button
-            onClick={() => setMobileSearch('+91 99887 76655')}
-            className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold text-[11px] border border-purple-200"
-          >
-            Priya Sharma (+91 99887 76655)
-          </button>
-          <button
-            onClick={() => setMobileSearch('+91 98765 43210')}
-            className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] border border-emerald-200"
-          >
-            Ravi Kumar (+91 98765 43210)
-          </button>
-        </div>
       </div>
 
       {/* BOOKINGS TABLE */}

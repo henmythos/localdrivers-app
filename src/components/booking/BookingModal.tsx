@@ -23,10 +23,19 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [selectedService, setSelectedService] = useState<ServiceType>(
     preselectedService || driver.services[0] || 'City Driver'
   );
-  const [customerName, setCustomerName] = useState('Priya Sharma');
-  const [customerPhone, setCustomerPhone] = useState('+91 99887 76655');
-  const [pickupLocation, setPickupLocation] = useState('Road No. 36, Jubilee Hills, Hyderabad');
-  const [destinationLocation, setDestinationLocation] = useState('RGIA Airport, Shamshabad');
+  const [customerName, setCustomerName] = useState(() => localStorage.getItem('localdrivers_customer_name') || '');
+  const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('localdrivers_verified_customer_phone') || '');
+  const [pickupLocation, setPickupLocation] = useState(() => {
+    try {
+      const stored = localStorage.getItem('localdrivers_user_location');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.address && !parsed.isFallback) return parsed.address;
+      }
+    } catch {}
+    return '';
+  });
+  const [destinationLocation, setDestinationLocation] = useState('');
   
   // Tomorrow's date default
   const tomorrow = new Date();
@@ -35,7 +44,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
   const [date, setDate] = useState(defaultDateStr);
   const [time, setTime] = useState('09:00 AM');
-  const [notes, setNotes] = useState('Automatic transmission car (Honda City). Non-smoker required.');
+  const [notes, setNotes] = useState('');
 
   // Confirmed booking response
   const [createdBooking, setCreatedBooking] = useState<Booking | null>(null);
@@ -67,6 +76,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       notes,
       estimatedFare,
     });
+
+    if (customerName.trim()) {
+      localStorage.setItem('localdrivers_customer_name', customerName.trim());
+    }
 
     setCreatedBooking(booking);
     setStep(7); // Confirmation Screen

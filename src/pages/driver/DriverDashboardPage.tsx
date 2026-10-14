@@ -174,29 +174,29 @@ export const DriverDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* PLATFORM COMMISSION PAYMENT DUE ALERT CARD (MISSING ORDERS URGENCY BANNER) */}
+      {/* PLATFORM COMMISSION PAYMENT DUE CARD (Professional Partner Portal Style) */}
       {isHold && (
-        <div className="bg-gradient-to-r from-red-600 via-amber-600 to-orange-600 text-white rounded-3xl p-6 shadow-xl mb-8 relative overflow-hidden border-2 border-amber-300/40">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
+        <div className="bg-white rounded-3xl p-6 shadow-md border-2 border-amber-400/80 mb-8 relative overflow-hidden">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/30 animate-bounce">
-                <AlertTriangle className="w-7 h-7 text-yellow-300" />
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-300">
+                <AlertTriangle className="w-6 h-6 stroke-[2.2]" />
               </div>
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-yellow-200 bg-red-950/60 px-2.5 py-0.5 rounded border border-yellow-400/40">
-                  ⚠️ YOU ARE MISSING RIDE ORDERS!
-                </span>
-                <h3 className="text-xl sm:text-2xl font-black text-white mt-1 leading-tight">
-                  You are missing orders! Pay last ride fee to get more orders.
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black uppercase tracking-wider">
+                  <span>Action Required • Account Paused</span>
+                </div>
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 leading-tight">
+                  Outstanding Platform Commission: ₹{pendingFee || 50}
                 </h3>
-                <p className="text-xs text-amber-50 mt-1 max-w-xl leading-relaxed font-medium">
-                  Your profile is currently paused on Hold. Pay your last ride fee (<strong>₹{pendingFee || 50}</strong>) using your personal payment link below to go Online instantly and start accepting new customer bookings!
+                <p className="text-xs text-slate-600 max-w-xl leading-relaxed font-medium">
+                  Your driver profile is paused for customer discovery. Settle your last trip platform fee to reactivate your online status and resume receiving automated ride dispatches.
                 </p>
 
-                {/* Display Admin Payment Link URL */}
-                <div className="mt-3 bg-slate-900/60 border border-amber-300/40 p-2.5 rounded-xl font-mono text-[11px] text-amber-200 flex items-center gap-2 max-w-md overflow-x-auto shadow-inner">
-                  <ExternalLink className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span className="truncate font-bold">
+                {/* Secure UPI Payment Link */}
+                <div className="mt-2 bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-mono text-[11px] text-slate-700 flex items-center gap-2 max-w-md overflow-x-auto">
+                  <ExternalLink className="w-3.5 h-3.5 text-brand-600 shrink-0" />
+                  <span className="truncate font-semibold">
                     {driver.paymentLinkUrl || `https://pay.localdrivers.in/upi?amount=${pendingFee || 50}&driver=${driver.driverCode || driver.id}`}
                   </span>
                 </div>
@@ -209,19 +209,19 @@ export const DriverDashboardPage: React.FC = () => {
                 href={driver.paymentLinkUrl || `https://pay.localdrivers.in/upi?amount=${pendingFee || 50}&driver=${driver.driverCode || driver.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-5 py-3.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 border border-yellow-300"
+                className="px-5 py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
               >
-                <CreditCard className="w-4 h-4 text-slate-950" />
-                Pay Last Ride Fee (₹{pendingFee || 50}) & Get Orders
+                <CreditCard className="w-4 h-4 text-white" />
+                Pay Dues (₹{pendingFee || 50})
               </a>
 
               {/* VERIFY & UNHOLD PROFILE */}
               <button
                 onClick={handlePayCommission}
-                className="px-5 py-3.5 bg-slate-950 hover:bg-slate-900 text-white font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 border border-slate-700"
+                className="px-5 py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                Verify Fee & Go Online
+                Verify Payment & Go Online
               </button>
             </div>
           </div>
