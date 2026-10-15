@@ -4,18 +4,35 @@ import { Booking, BookingStatus } from '../types';
 const MY_BOOKINGS_STORAGE_KEY = 'localdrivers_customer_booking_ids';
 
 export const bookingsService = {
+  // Check and rotate pending bookings older than 20 seconds to next available online driver
+  checkAndAutoPassPendingBookings(): void {
+    const now = Date.now();
+    const bookings = dbService.getBookings();
+    bookings.forEach(b => {
+      if (b.status === 'Pending') {
+        const assignedTime = new Date(b.assignedAt || b.createdAt).getTime();
+        if ((now - assignedTime) / 1000 >= 20) {
+          dbService.reassignBookingToNextDriver(b.id);
+        }
+      }
+    });
+  },
+
   // Get all bookings (for Admin)
   getAllBookings(): Booking[] {
+    this.checkAndAutoPassPendingBookings();
     return dbService.getBookings();
   },
 
   // Get booking details by ID
   getBookingById(id: string): Booking | undefined {
+    this.checkAndAutoPassPendingBookings();
     return dbService.getBookingById(id);
   },
 
   // Get customer local bookings filtered by verified customer phone number
   getBookingsByCustomerPhone(phone: string): Booking[] {
+    this.checkAndAutoPassPendingBookings();
     const cleanPhoneDigits = phone.replace(/\D/g, '');
     if (!cleanPhoneDigits || cleanPhoneDigits.length < 10) return [];
     
@@ -28,6 +45,7 @@ export const bookingsService = {
 
   // Get customer local bookings remembered on device
   getCustomerBookings(verifiedPhone?: string): Booking[] {
+    this.checkAndAutoPassPendingBookings();
     if (verifiedPhone) {
       return this.getBookingsByCustomerPhone(verifiedPhone);
     }
@@ -47,6 +65,7 @@ export const bookingsService = {
 
   // Get driver bookings
   getDriverBookings(driverId: string): Booking[] {
+    this.checkAndAutoPassPendingBookings();
     return dbService.getBookingsForDriver(driverId);
   },
 

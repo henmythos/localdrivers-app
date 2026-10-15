@@ -50,6 +50,18 @@ export const DriverDashboardPage: React.FC = () => {
   const activeBookings = driverBookings.filter(b => b.status === 'Accepted' || b.status === 'Driver Arriving');
   const completedTrips = driverBookings.filter(b => b.status === 'Completed');
 
+  // Automatic 20-second timeout: automatically pass to next online driver if unaccepted
+  useEffect(() => {
+    if (pendingRequests.length === 0) return;
+    pendingRequests.forEach(req => {
+      const assignedTime = new Date(req.assignedAt || req.createdAt).getTime();
+      const elapsedSeconds = Math.floor((nowTimestamp - assignedTime) / 1000);
+      if (elapsedSeconds >= 20) {
+        bookingsService.passToNextDriver(req.id);
+      }
+    });
+  }, [nowTimestamp, pendingRequests]);
+
   const totalEarnings = completedTrips.reduce((acc, curr) => acc + curr.estimatedFare, 3200);
   const pendingFee = driver.pendingCommissionFee || 0;
   const isHold = driver.isHold || pendingFee > 0 || driver.status === 'Hold' || driver.status === 'Payment Due';

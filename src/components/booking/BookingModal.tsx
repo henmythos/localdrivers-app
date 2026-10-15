@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { X, CheckCircle2, Calendar, Clock, MapPin, Navigation, Car, ShieldCheck, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Driver, ServiceType, Booking } from '../../types';
 import { bookingsService } from '../../services/bookings';
@@ -17,6 +18,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   onClose,
   onBookingComplete,
 }) => {
+  const navigate = useNavigate();
   const [step, setStep] = useState<number>(1);
 
   // Form State
@@ -518,7 +520,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 <button
                   onClick={() => {
                     onClose();
-                    window.location.href = `/bookings/${createdBooking.id}`;
+                    navigate(`/bookings/${createdBooking.id}`);
                   }}
                   className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors"
                 >

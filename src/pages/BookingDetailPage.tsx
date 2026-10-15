@@ -60,13 +60,33 @@ export const BookingDetailPage: React.FC = () => {
     setIsAuthorized(false);
   };
 
+  const [nowTimestamp, setNowTimestamp] = useState(Date.now());
+
   useEffect(() => {
     loadBooking();
     const unsubscribe = dbService.subscribe(() => {
       loadBooking();
     });
-    return () => unsubscribe();
+    const interval = setInterval(() => {
+      setNowTimestamp(Date.now());
+    }, 1000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [id]);
+
+  // Auto-pass if still pending after 20s
+  useEffect(() => {
+    if (booking && booking.status === 'Pending') {
+      const assignedTime = new Date(booking.assignedAt || booking.createdAt).getTime();
+      const elapsedSeconds = Math.floor((nowTimestamp - assignedTime) / 1000);
+      if (elapsedSeconds >= 20) {
+        bookingsService.passToNextDriver(booking.id);
+      }
+    }
+  }, [nowTimestamp, booking]);
 
   const handleAuthorizePhone = (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,12 +225,16 @@ export const BookingDetailPage: React.FC = () => {
           </div>
 
           <div>
-            {booking.status === 'Pending' && (
-              <span className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-amber-400 text-amber-950 flex items-center gap-2 shadow-md">
-                <span className="w-2 h-2 rounded-full bg-amber-950 animate-ping" />
-                Waiting for Driver Accept
-              </span>
-            )}
+            {booking.status === 'Pending' && (() => {
+              const assignedTime = new Date(booking.assignedAt || booking.createdAt).getTime();
+              const remainingSec = Math.max(0, 20 - Math.floor((nowTimestamp - assignedTime) / 1000));
+              return (
+                <span className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-amber-400 text-amber-950 flex items-center gap-2 shadow-md">
+                  <span className="w-2 h-2 rounded-full bg-amber-950 animate-ping" />
+                  Connecting Driver ({remainingSec}s)
+                </span>
+              );
+            })()}
             {booking.status === 'Accepted' && (
               <span className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-emerald-400 text-emerald-950 flex items-center gap-2 shadow-md">
                 <CheckCircle2 className="w-4 h-4 text-emerald-950" />
