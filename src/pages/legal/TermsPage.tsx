@@ -44,10 +44,10 @@ export const TermsPage: React.FC = () => {
           <section className="space-y-2">
             <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-brand-600" />
-              2. Fares & Platform Commission Structure
+              2. Fares & Platform Fee Structure
             </h2>
             <p>
-              Rides are priced transparently based on service type (City, Outstation, Monthly, VIP, Escort). Upon trip completion, drivers pay a tiered 3–5% platform commission fee (Under ₹500 to ₹25, ₹500–₹999 to ₹40, ₹1000–₹1999 to ₹50, ₹2000+ to 5%/₹100). Profile visibility remains on Hold until the platform fee is cleared.
+              Rides are priced transparently based on service type (City, Outstation, Monthly, VIP, Escort). Upon trip completion, drivers settle a tiered platform fee (Under ₹500 to ₹25, ₹500–₹999 to ₹40, ₹1000–₹1999 to ₹50, ₹2000+ to ₹100). Profile visibility remains on Hold until the platform fee is cleared.
             </p>
           </section>
 

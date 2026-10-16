@@ -5,14 +5,18 @@ import {
   DollarSign, Clock, Moon, Save, RotateCcw, CheckCircle2, AlertCircle, 
   Calculator, Sparkles, SlidersHorizontal 
 } from 'lucide-react';
-import { ServiceCategory, ServiceType } from '../../types';
+import { ServiceCategory, ServiceType, AdminPricingConfig } from '../../types';
 import { dbService } from '../../services/database';
 import { authService } from '../../services/auth';
+import { bookingsService } from '../../services/bookings';
+import { DEFAULT_ADMIN_PRICING_CONFIG } from '../../services/billing';
 
 export const AdminServicesPage: React.FC = () => {
   const navigate = useNavigate();
 
+  const [activeTab, setActiveTab] = useState<'services' | 'billing_policy'>('services');
   const [services, setServices] = useState<ServiceCategory[]>([]);
+  const [pricingConfig, setPricingConfig] = useState<AdminPricingConfig>(DEFAULT_ADMIN_PRICING_CONFIG);
   const [editingService, setEditingService] = useState<ServiceCategory | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -28,6 +32,7 @@ export const AdminServicesPage: React.FC = () => {
       return;
     }
     setServices(dbService.getServices());
+    setPricingConfig(bookingsService.getPricingConfig());
   };
 
   useEffect(() => {
@@ -67,6 +72,23 @@ export const AdminServicesPage: React.FC = () => {
       const reset = dbService.resetServicesToDefaults();
       setServices(reset);
       showToast('Reset all services to default factory rate cards');
+    }
+  };
+
+  const handleUpdatePricingConfigField = <K extends keyof AdminPricingConfig>(field: K, value: AdminPricingConfig[K]) => {
+    setPricingConfig(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSavePricingConfig = () => {
+    bookingsService.updatePricingConfig(pricingConfig);
+    showToast('Updated global trip timer and hourly billing policy.');
+  };
+
+  const handleResetPricingConfig = () => {
+    if (window.confirm('Reset trip timer and hourly billing rules to standard defaults?')) {
+      const def = bookingsService.updatePricingConfig(DEFAULT_ADMIN_PRICING_CONFIG);
+      setPricingConfig(def);
+      showToast('Reset trip pricing rules to standard defaults.');
     }
   };
 
@@ -116,7 +138,7 @@ export const AdminServicesPage: React.FC = () => {
       </button>
 
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-extrabold uppercase tracking-widest text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded border border-brand-200">
@@ -127,30 +149,80 @@ export const AdminServicesPage: React.FC = () => {
             Site-Wide Hourly Charges & Service Pricing
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Decide base package fares, extra hourly rates, night allowances, and active drive types across localdrivers.in
+            Configure hourly rates, rounding rules, 24-hour packages, outstation limits, and live drive categories
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start md:self-auto">
-          <button
-            onClick={handleResetDefaults}
-            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 border border-slate-200"
-          >
-            <RotateCcw className="w-4 h-4 text-slate-500" />
-            Reset Defaults
-          </button>
+        {activeTab === 'services' ? (
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            <button
+              onClick={handleResetDefaults}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 border border-slate-200"
+            >
+              <RotateCcw className="w-4 h-4 text-slate-500" />
+              Reset Defaults
+            </button>
 
-          <button
-            onClick={handleSaveAll}
-            className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center gap-1.5"
-          >
-            <Save className="w-4 h-4" />
-            Save All Rates
-          </button>
-        </div>
+            <button
+              onClick={handleSaveAll}
+              className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center gap-1.5"
+            >
+              <Save className="w-4 h-4" />
+              Save All Rates
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            <button
+              onClick={handleResetPricingConfig}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 border border-slate-200"
+            >
+              <RotateCcw className="w-4 h-4 text-slate-500" />
+              Reset Defaults
+            </button>
+
+            <button
+              onClick={handleSavePricingConfig}
+              className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center gap-1.5"
+            >
+              <Save className="w-4 h-4" />
+              Save Billing Rules
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* LIVE FARE ESTIMATOR SIMULATOR CARD FOR ADMIN */}
+      {/* TABS NAVIGATION */}
+      <div className="flex items-center gap-2 border-b border-slate-200 mb-8 pb-px">
+        <button
+          onClick={() => setActiveTab('services')}
+          className={`px-5 py-3 text-xs font-black border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === 'services'
+              ? 'border-brand-600 text-brand-700 bg-brand-50/50 rounded-t-xl'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Car className="w-4 h-4" />
+          Service Rate Cards ({services.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('billing_policy')}
+          className={`px-5 py-3 text-xs font-black border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === 'billing_policy'
+              ? 'border-brand-600 text-brand-700 bg-brand-50/50 rounded-t-xl'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Clock className="w-4 h-4" />
+          Trip Timer, Distance & Hourly Billing Rules
+        </button>
+      </div>
+
+      {/* TAB 1: SERVICE RATE CARDS */}
+      {activeTab === 'services' && (
+        <>
+          {/* LIVE FARE ESTIMATOR SIMULATOR CARD FOR ADMIN */}
       <div className="bg-gradient-to-r from-slate-900 via-brand-950 to-slate-900 text-white rounded-3xl p-6 shadow-xl mb-8 border border-brand-800/40">
         <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
           <div className="flex items-center gap-2.5">
@@ -422,7 +494,362 @@ export const AdminServicesPage: React.FC = () => {
           );
         })}
       </div>
+    </>
+  )}
+
+  {/* TAB 2: TRIP TIMER, DISTANCE & HOURLY BILLING RULES */}
+  {activeTab === 'billing_policy' && (
+    <div className="space-y-8 animate-in fade-in">
+      
+      {/* SNAPSHOT POLICY ASSURANCE BANNER */}
+      <div className="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 text-white p-6 rounded-3xl shadow-xl border border-blue-700/40">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-5 h-5 text-blue-300" />
+          </div>
+          <div>
+            <h3 className="font-extrabold text-white text-base">Policy Snapshot Guarantee</h3>
+            <p className="text-xs text-blue-200 mt-1 leading-relaxed">
+              When a customer confirms a booking, an authoritative snapshot of these billing parameters is permanently frozen with the trip record. Modifying rates below will strictly apply to new trips, protecting active or historical trips from arbitrary price shifts.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        {/* SECTION 1: HOURLY DRIVER RENTAL & ROUNDING RULES */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-soft space-y-5">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center">
+              <Clock className="w-5 h-5 text-brand-600" />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">Hourly Driver Rental & Rounding</h3>
+              <p className="text-xs text-slate-500">Hourly billing rules and partial-hour calculation policy</p>
+            </div>
+          </div>
+
+          {/* Hourly Rental Rate */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-extrabold text-slate-900 block">Hourly Driver Rental Rate</label>
+              <span className="text-[11px] text-slate-500">Standard rate per billable hour</span>
+            </div>
+            <div className="relative w-36">
+              <span className="absolute left-3 top-2 text-xs font-black text-slate-400">₹</span>
+              <input
+                type="number"
+                min="50"
+                value={pricingConfig.hourlyRate}
+                onChange={(e) => handleUpdatePricingConfigField('hourlyRate', Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-7 pr-3 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+          </div>
+
+          {/* Minimum Billable Hours */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-extrabold text-slate-900 block">Minimum Billable Hours</label>
+              <span className="text-[11px] text-slate-500">Minimum hours charged for any active ride</span>
+            </div>
+            <div className="w-36">
+              <input
+                type="number"
+                min="1"
+                max="24"
+                value={pricingConfig.minimumHours}
+                onChange={(e) => handleUpdatePricingConfigField('minimumHours', Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+          </div>
+
+          {/* Minimum Booking Duration */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-extrabold text-slate-900 block">Minimum Booking Duration</label>
+              <span className="text-[11px] text-slate-500">Minimum driver commitment required</span>
+            </div>
+            <div className="w-36">
+              <input
+                type="number"
+                min="1"
+                max="24"
+                value={pricingConfig.minimumBookingDurationHours}
+                onChange={(e) => handleUpdatePricingConfigField('minimumBookingDurationHours', Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+          </div>
+
+          {/* Partial-Hour Rounding Rule */}
+          <div>
+            <label className="text-xs font-extrabold text-slate-900 block mb-1">Partial-Hour Rounding Rule</label>
+            <span className="text-[11px] text-slate-500 block mb-2">Controls how extra elapsed minutes are rounded into billable hours</span>
+            <select
+              value={pricingConfig.partialHourRule}
+              onChange={(e) => handleUpdatePricingConfigField('partialHourRule', e.target.value as any)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-brand-500"
+            >
+              <option value="ceil_hour">Every started hour counts as a full hour (e.g. 12h 30m = 13 hrs)</option>
+              <option value="15_min_block">15-minute billing block (e.g. 12h 10m = 12.25 hrs, 12h 30m = 12.5 hrs)</option>
+              <option value="exact_fraction">Exact fractional minutes (e.g. 12h 30m = 12.5 hrs)</option>
+            </select>
+          </div>
+
+          {/* Rounding Rule Explanation Box */}
+          <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600">
+            <span className="font-bold text-slate-800 block mb-1">Example Calculation:</span>
+            {pricingConfig.partialHourRule === 'ceil_hour' && (
+              <p>A trip lasting 12 hours and 30 minutes will be billed as 13 full hours at ₹{pricingConfig.hourlyRate}/hr = ₹{(13 * pricingConfig.hourlyRate).toLocaleString('en-IN')}.</p>
+            )}
+            {pricingConfig.partialHourRule === '15_min_block' && (
+              <p>A trip lasting 12 hours and 10 minutes will round up to 12.25 hours at ₹{pricingConfig.hourlyRate}/hr = ₹{(12.25 * pricingConfig.hourlyRate).toLocaleString('en-IN')}.</p>
+            )}
+            {pricingConfig.partialHourRule === 'exact_fraction' && (
+              <p>A trip lasting 12 hours and 30 minutes will be billed as exactly 12.5 hours at ₹{pricingConfig.hourlyRate}/hr = ₹{(12.5 * pricingConfig.hourlyRate).toLocaleString('en-IN')}.</p>
+            )}
+          </div>
+        </div>
+
+        {/* SECTION 2: 24-HOUR DAILY & MULTI-DAY PACKAGES */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-soft space-y-5">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+            <div className="w-10 h-10 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-purple-600" />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">24-Hour Daily & Multi-Day Packages</h3>
+              <p className="text-xs text-slate-500">Full day rates and multi-day discounts</p>
+            </div>
+          </div>
+
+          {/* Daily 24h Package Rate */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-extrabold text-slate-900 block">24-Hour Day Rental Package Rate</label>
+              <span className="text-[11px] text-slate-500">Flat rate for full 24-hour job duration</span>
+            </div>
+            <div className="relative w-36">
+              <span className="absolute left-3 top-2 text-xs font-black text-slate-400">₹</span>
+              <input
+                type="number"
+                min="500"
+                value={pricingConfig.dailyRate24h}
+                onChange={(e) => handleUpdatePricingConfigField('dailyRate24h', Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-7 pr-3 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+          </div>
+
+          {/* Multi-Day Discount */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-extrabold text-slate-900 block">Multi-Day Booking Discount</label>
+              <span className="text-[11px] text-slate-500">Percentage off daily rate for trips &gt; 1 day</span>
+            </div>
+            <div className="relative w-36">
+              <input
+                type="number"
+                min="0"
+                max="50"
+                value={pricingConfig.multiDayDiscountPercent}
+                onChange={(e) => handleUpdatePricingConfigField('multiDayDiscountPercent', Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-7 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+              />
+              <span className="absolute right-3 top-2 text-xs font-black text-slate-400">%</span>
+            </div>
+          </div>
+
+          <div className="p-3.5 bg-purple-50/50 rounded-2xl border border-purple-100 text-xs text-purple-900">
+            <span className="font-bold block mb-1">Multi-Day Package Example:</span>
+            <p>
+              A 3-day booking charges ₹{pricingConfig.dailyRate24h}/day with a {pricingConfig.multiDayDiscountPercent}% multi-day discount = ₹{Math.round(3 * pricingConfig.dailyRate24h * (1 - pricingConfig.multiDayDiscountPercent / 100)).toLocaleString('en-IN')}.
+            </p>
+          </div>
+        </div>
+
+        {/* SECTION 3: OUTSTATION PRICING RULES & KILOMETERS */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-soft space-y-5">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center">
+              <MapPin className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">Outstation Pricing Rules & Distance</h3>
+              <p className="text-xs text-slate-500">Daily outstation rates and included road kilometers</p>
+            </div>
+          </div>
+
+          {/* Outstation Rate Per Day */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-extrabold text-slate-900 block">Outstation Daily Rate</label>
+              <span className="text-[11px] text-slate-500">Base day rate for intercity and outstation trips</span>
+            </div>
+            <div className="relative w-36">
+              <span className="absolute left-3 top-2 text-xs font-black text-slate-400">₹</span>
+              <input
+                type="number"
+                min="500"
+                value={pricingConfig.outstationRatePerDay}
+                onChange={(e) => handleUpdatePricingConfigField('outstationRatePerDay', Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-7 pr-3 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+          </div>
+
+          {/* Included Km Per Day */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-extrabold text-slate-900 block">Included Km Per Day</label>
+              <span className="text-[11px] text-slate-500">Complimentary road distance per outstation day</span>
+            </div>
+            <div className="relative w-36">
+              <input
+                type="number"
+                min="50"
+                value={pricingConfig.outstationIncludedKmPerDay}
+                onChange={(e) => handleUpdatePricingConfigField('outstationIncludedKmPerDay', Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-10 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+              />
+              <span className="absolute right-3 top-2 text-xs font-black text-slate-400">km</span>
+            </div>
+          </div>
+
+          {/* Additional Km Rate */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-extrabold text-slate-900 block">Additional Kilometer Rate</label>
+              <span className="text-[11px] text-slate-500">Per km charge beyond included quota</span>
+            </div>
+            <div className="relative w-36">
+              <span className="absolute left-3 top-2 text-xs font-black text-slate-400">₹</span>
+              <input
+                type="number"
+                min="1"
+                value={pricingConfig.outstationExtraKmRate}
+                onChange={(e) => handleUpdatePricingConfigField('outstationExtraKmRate', Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-7 pr-10 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+              />
+              <span className="absolute right-3 top-2 text-xs font-black text-slate-400">/km</span>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 4: OPERATIONAL SETTINGS & ALLOWANCES */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-soft space-y-5">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+            <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center">
+              <SlidersHorizontal className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-base">Allowances & Operations</h3>
+              <p className="text-xs text-slate-500">Night travel, waiting fees, and reminder thresholds</p>
+            </div>
+          </div>
+
+          {/* Night Allowance */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-extrabold text-slate-900 block">Night Allowance</label>
+              <span className="text-[11px] text-slate-500">Applied for service between 10:00 PM and 06:00 AM</span>
+            </div>
+            <div className="relative w-36">
+              <span className="absolute left-3 top-2 text-xs font-black text-slate-400">₹</span>
+              <input
+                type="number"
+                min="0"
+                value={pricingConfig.nightAllowance}
+                onChange={(e) => handleUpdatePricingConfigField('nightAllowance', Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-7 pr-3 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+          </div>
+
+          {/* Waiting Charge */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-extrabold text-slate-900 block">Waiting Charge Per Hour</label>
+              <span className="text-[11px] text-slate-500">Overtime or standstill waiting compensation</span>
+            </div>
+            <div className="relative w-36">
+              <span className="absolute left-3 top-2 text-xs font-black text-slate-400">₹</span>
+              <input
+                type="number"
+                min="0"
+                value={pricingConfig.waitingChargePerHour}
+                onChange={(e) => handleUpdatePricingConfigField('waitingChargePerHour', Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-7 pr-3 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+          </div>
+
+          {/* Active Trip Reminder Interval */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-extrabold text-slate-900 block">Active Trip Reminder Interval</label>
+              <span className="text-[11px] text-slate-500">Minutes between customer completion reminders</span>
+            </div>
+            <div className="relative w-36">
+              <input
+                type="number"
+                min="10"
+                max="360"
+                value={pricingConfig.reminderIntervalMinutes}
+                onChange={(e) => handleUpdatePricingConfigField('reminderIntervalMinutes', Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-10 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+              />
+              <span className="absolute right-3 top-2 text-xs font-black text-slate-400">min</span>
+            </div>
+          </div>
+
+          {/* Location Freshness Limit */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-extrabold text-slate-900 block">Location Freshness Limit</label>
+              <span className="text-[11px] text-slate-500">Max minutes before driver GPS is marked stale</span>
+            </div>
+            <div className="relative w-36">
+              <input
+                type="number"
+                min="5"
+                max="180"
+                value={pricingConfig.locationFreshnessMinutes}
+                onChange={(e) => handleUpdatePricingConfigField('locationFreshnessMinutes', Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-10 py-2 text-xs font-black text-slate-900 focus:outline-none focus:border-brand-500"
+              />
+              <span className="absolute right-3 top-2 text-xs font-black text-slate-400">min</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Action Row */}
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+        <button
+          onClick={handleResetPricingConfig}
+          className="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors flex items-center gap-2 border border-slate-200"
+        >
+          <RotateCcw className="w-4 h-4 text-slate-500" />
+          Reset Defaults
+        </button>
+
+        <button
+          onClick={handleSavePricingConfig}
+          className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2"
+        >
+          <Save className="w-4 h-4" />
+          Save Trip Timer & Billing Rules
+        </button>
+      </div>
 
     </div>
-  );
+  )}
+
+</div>
+);
 };

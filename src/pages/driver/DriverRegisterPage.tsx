@@ -112,22 +112,33 @@ export const DriverRegisterPage: React.FC = () => {
       return;
     }
 
+    const documents = [
+      { id: `doc-photo-${Date.now()}`, type: 'Profile Photo Selfie' as const, status: 'Under Review' as const, url: photoSelfieUrl, uploadedAt: new Date().toISOString() },
+      { id: `doc-aadh-f-${Date.now()}`, type: 'Aadhaar Card (Front)' as const, status: 'Under Review' as const, url: aadhaarFrontUrl, uploadedAt: new Date().toISOString() },
+      { id: `doc-aadh-b-${Date.now()}`, type: 'Aadhaar Card (Back)' as const, status: 'Under Review' as const, url: aadhaarBackUrl, uploadedAt: new Date().toISOString() },
+      { id: `doc-lic-f-${Date.now()}`, type: 'Driving Licence (Front)' as const, status: 'Under Review' as const, url: licenseFrontUrl, uploadedAt: new Date().toISOString() },
+      { id: `doc-lic-b-${Date.now()}`, type: 'Driving Licence (Back)' as const, status: 'Under Review' as const, url: licenseBackUrl, uploadedAt: new Date().toISOString() },
+    ];
+
     driversService.registerDriver({
       name: formData.name.trim(),
       phone: formData.phone.trim(),
-      email: formData.email.trim() || undefined,
+      email: formData.email.trim() || `${formData.phone.trim()}@localdrivers.in`,
+      photo: photoSelfieUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400',
+      rating: 5.0,
+      totalTrips: 0,
+      startingPrice: 299,
+      distanceKm: 2.5,
+      latitude: 17.4126,
+      longitude: 78.4071,
       area: formData.area.trim() || 'Hyderabad',
       city: 'Hyderabad',
       experienceYears: Number(formData.experienceYears) || 1,
       languages: selectedLanguages,
-      services: selectedServices,
-      vehicleCategories: selectedVehicles,
+      services: selectedServices as any,
+      vehicleCategories: selectedVehicles as any,
       description: formData.description.trim() || 'Professional driver registered on Localdrivers platform.',
-      photoUrl: photoSelfieUrl,
-      aadhaarFrontUrl: aadhaarFrontUrl,
-      aadhaarBackUrl: aadhaarBackUrl,
-      licenseFrontUrl: licenseFrontUrl,
-      licenseBackUrl: licenseBackUrl,
+      documents,
     });
 
     setSubmittedPhone(formData.phone.trim());
@@ -196,7 +207,7 @@ export const DriverRegisterPage: React.FC = () => {
           </div>
           <h1 className="text-2xl font-black text-slate-900">Become a Driver Partner</h1>
           <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-            Join Hyderabad's premier on-demand driver platform. Flexible hours, direct client connections, transparent low 3-5% platform fee.
+            Join Hyderabad's premier on-demand driver platform. Flexible hours, direct client connections, transparent nominal platform fee.
           </p>
         </div>
 

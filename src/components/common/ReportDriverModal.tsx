@@ -6,6 +6,10 @@ interface ReportDriverModalProps {
   onClose: () => void;
   initialDriverCode?: string;
   initialDriverName?: string;
+  driverId?: string;
+  driverName?: string;
+  driverCode?: string;
+  bookingId?: string;
 }
 
 export const ReportDriverModal: React.FC<ReportDriverModalProps> = ({
@@ -13,9 +17,12 @@ export const ReportDriverModal: React.FC<ReportDriverModalProps> = ({
   onClose,
   initialDriverCode = '',
   initialDriverName = '',
+  driverName: propDriverName,
+  driverCode: propDriverCode,
+  bookingId,
 }) => {
-  const [driverCode, setDriverCode] = useState(initialDriverCode);
-  const [driverName, setDriverName] = useState(initialDriverName);
+  const [driverCode, setDriverCode] = useState(propDriverCode || initialDriverCode);
+  const [driverName, setDriverName] = useState(propDriverName || initialDriverName);
   const [category, setCategory] = useState<'Report Driver' | 'General Query' | 'Payment Issue' | 'Safety Concern'>('Report Driver');
   const [issueType, setIssueType] = useState('Behavior & Professionalism');
   const [customerPhone, setCustomerPhone] = useState('');

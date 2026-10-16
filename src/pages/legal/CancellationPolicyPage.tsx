@@ -44,10 +44,10 @@ export const CancellationPolicyPage: React.FC = () => {
           <section className="space-y-2">
             <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
               <RefreshCw className="w-4 h-4 text-brand-600" />
-              2. Platform Commission Refund for Drivers
+              2. Platform Fee Refund for Drivers
             </h2>
             <p>
-              Driver partners pay a 3–5% platform commission fee upon completing a ride. In the event of a duplicate payment or billing discrepancy, driver partners can submit a refund request to <strong>localdrivers.in@gmail.com</strong> providing their unique 6-digit Driver Code (e.g. <code>A1B2C3</code>). Refunds are processed back to the driver's UPI account within 24 to 48 hours.
+              Driver partners settle a nominal platform fee upon completing a ride. In the event of a duplicate payment or billing discrepancy, driver partners can submit a refund request to <strong>localdrivers.in@gmail.com</strong> providing their unique 6-digit Driver Code (e.g. <code>A1B2C3</code>). Refunds are processed back to the driver's UPI account within 24 to 48 hours.
             </p>
           </section>
 

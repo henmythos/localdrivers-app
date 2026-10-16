@@ -1,5 +1,5 @@
 import { dbService } from './database';
-import { Booking, BookingStatus } from '../types';
+import { Booking, BookingStatus, GeoLocation, AdminPricingConfig } from '../types';
 
 const MY_BOOKINGS_STORAGE_KEY = 'localdrivers_customer_booking_ids';
 
@@ -90,8 +90,47 @@ export const bookingsService = {
     return dbService.updateBookingStatus(id, status);
   },
 
+  // Start Trip (Authoritative Server Timestamp & Location Capture)
+  startTrip(id: string, location?: GeoLocation, odometerStartKm?: number): Booking | undefined {
+    return dbService.startTrip(id, location, odometerStartKm);
+  },
+
+  // Complete Trip (Idempotent duration calculation, distance verification, itemized charges)
+  completeTrip(
+    id: string,
+    location?: GeoLocation,
+    completedBy: 'customer' | 'driver' = 'customer',
+    odometerEndKm?: number
+  ): Booking | undefined {
+    return dbService.completeTrip(id, location, completedBy, odometerEndKm);
+  },
+
+  // Raise dispute
+  raiseDispute(id: string, reason: string): Booking | undefined {
+    return dbService.raiseTripDispute(id, reason);
+  },
+
+  // Admin manual correction with audit record
+  adminCorrectTrip(
+    id: string,
+    changes: Partial<Booking>,
+    adminEmail: string,
+    reason: string
+  ): Booking | undefined {
+    return dbService.adminCorrectTrip(id, changes, adminEmail, reason);
+  },
+
   // Driver rejects/passes or 20s timeout passes to next online driver
   passToNextDriver(id: string): Booking | undefined {
     return dbService.reassignBookingToNextDriver(id);
+  },
+
+  // Admin Pricing Config
+  getPricingConfig(): AdminPricingConfig {
+    return dbService.getAdminPricingConfig();
+  },
+
+  updatePricingConfig(updates: Partial<AdminPricingConfig>): AdminPricingConfig {
+    return dbService.updateAdminPricingConfig(updates);
   }
 };

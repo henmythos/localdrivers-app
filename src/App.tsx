@@ -84,6 +84,7 @@ export const App: React.FC = () => {
                 />
               }
             />
+            <Route path="/drivers" element={<Navigate to="/find-drivers" replace />} />
             <Route path="/drivers/:id" element={<DriverProfilePage />} />
             <Route path="/bookings" element={<BookingsPage />} />
             <Route path="/bookings/:id" element={<BookingDetailPage />} />

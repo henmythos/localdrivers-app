@@ -21,6 +21,7 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
   const [services, setServices] = useState<ServiceCategory[]>([]);
   const [selectedDriverForBooking, setSelectedDriverForBooking] = useState<Driver | null>(null);
   const [preselectedService, setPreselectedService] = useState<any>(undefined);
+  const [activeFilterChip, setActiveFilterChip] = useState<'all' | 'top_rated' | 'nearby' | 'available'>('all');
 
   const loadData = () => {
     const rawDrivers = driversService.getApprovedDrivers();
@@ -55,6 +56,13 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
       setSelectedDriverForBooking(driver);
     }
   };
+
+  const displayedDrivers = drivers.filter(d => {
+    if (activeFilterChip === 'top_rated') return d.rating >= 4.8;
+    if (activeFilterChip === 'nearby') return d.distanceKm <= 5.0;
+    if (activeFilterChip === 'available') return d.isOnline;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-slate-100/60 pb-24 md:pb-12">
@@ -132,18 +140,26 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
                   </div>
                   <div>
                     <h3 className="font-extrabold text-navy-900 text-base group-hover:text-brand-600 transition-colors">
-                      1. Driver Now
+                      1. Driver Now (Hourly Travel)
                     </h3>
-                    <p className="text-xs text-slate-600 font-medium">Book a driver for your trip</p>
+                    <p className="text-xs text-slate-600 font-medium mt-0.5">
+                      Shopping, hospital visits, weddings & night parties
+                    </p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-400 group-hover:translate-x-1 transition-transform" />
               </div>
 
-              <div className="mt-4 pt-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white text-cardBlue-text border border-blue-200 shadow-xs">
-                  <Clock className="w-3.5 h-3.5" />
-                  4H / 8H / 24H
+              <div className="mt-4 pt-2 flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-white text-cardBlue-text border border-blue-200 shadow-xs">
+                  <Clock className="w-3 h-3 text-sky-600" />
+                  4 Hours (₹499)
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-white text-cardBlue-text border border-blue-200 shadow-xs">
+                  8 Hours (₹899)
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-white text-cardBlue-text border border-blue-200 shadow-xs">
+                  12 Hours (₹1,299)
                 </span>
               </div>
             </div>
@@ -160,18 +176,20 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
                   </div>
                   <div>
                     <h3 className="font-extrabold text-navy-900 text-base group-hover:text-emerald-700 transition-colors">
-                      2. Hours & Day
+                      2. Hours & Day (Scheduled & Outstation)
                     </h3>
-                    <p className="text-xs text-slate-600 font-medium">Plan your ride in advance</p>
+                    <p className="text-xs text-slate-600 font-medium mt-0.5">
+                      Vijayawada, Srisailam, Tirupati, Warangal trips
+                    </p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-400 group-hover:translate-x-1 transition-transform" />
               </div>
 
-              <div className="mt-4 pt-2">
+              <div className="mt-4 pt-2 flex flex-wrap items-center gap-1.5">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white text-cardGreen-text border border-emerald-200 shadow-xs">
                   <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                  Select Date & Time
+                  ₹1,499/day + allowance • Round trip & One-way
                 </span>
               </div>
             </div>
@@ -188,9 +206,11 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
                   </div>
                   <div>
                     <h3 className="font-extrabold text-navy-900 text-base group-hover:text-purple-700 transition-colors">
-                      3. Permanent Driver
+                      3. Permanent Driver (Monthly Contract)
                     </h3>
-                    <p className="text-xs text-slate-600 font-medium">For your daily needs</p>
+                    <p className="text-xs text-slate-600 font-medium mt-0.5">
+                      Corporate executives, elderly parents & school drop-offs
+                    </p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-400 group-hover:translate-x-1 transition-transform" />
@@ -198,12 +218,12 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
 
               <div className="mt-4 pt-2">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white text-cardPurple-text border border-purple-200 shadow-xs">
-                  ₹ {(services.find(s => s.title === 'Monthly Driver')?.startingPrice || 28000).toLocaleString('en-IN')} / month
+                  Fixed Rate: ₹28,000 / month
                 </span>
               </div>
             </div>
 
-            {/* 4. VIP & LUXURY DRIVER (Light Peach/Orange) */}
+            {/* 4. CAR + DRIVER / SELF DRIVE (Light Peach/Orange) */}
             <div
               onClick={() => handleSelectCategory('VIP Driver')}
               className="bg-cardPeach-bg border border-cardPeach-border rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all cursor-pointer relative flex flex-col justify-between group"
@@ -215,10 +235,10 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
                   </div>
                   <div>
                     <h3 className="font-extrabold text-navy-900 text-base group-hover:text-orange-700 transition-colors">
-                      4. VIP & Luxury Driver
+                      4. Car + Driver / Self Drive (Luxury Fleet)
                     </h3>
-                    <p className="text-xs text-slate-600 font-medium">
-                      Formal Chauffeurs • High-End Vehicles
+                    <p className="text-xs text-slate-600 font-medium mt-0.5">
+                      Premium sedans and SUVs (Audi, BMW, Fortuner, Mercedes)
                     </p>
                   </div>
                 </div>
@@ -228,7 +248,7 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
               <div className="mt-4 pt-2">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white text-cardPeach-text border border-orange-200 shadow-xs">
                   <Car className="w-3.5 h-3.5 text-orange-600" />
-                  Luxury & Executive Cars
+                  Luxury Sedans & SUVs with Driver
                 </span>
               </div>
             </div>
@@ -236,63 +256,92 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
           </div>
         </div>
 
-        {/* TRUST BADGES ROW (5 CIRCULAR BADGES) */}
-        <div className="bg-white rounded-2xl p-4 shadow-soft border border-slate-200/80 grid grid-cols-5 gap-2 text-center">
-          
-          <div className="flex flex-col items-center">
-            <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-1">
-              <ShieldCheck className="w-5 h-5" />
+        {/* 5 TRUST & SAFETY BADGES (Section 4.1.3) */}
+        <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-soft border border-slate-200/80">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+            
+            <div className="flex flex-col items-center p-2 rounded-xl bg-slate-50 border border-slate-100">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-1.5 shadow-xs">
+                <ShieldCheck className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <span className="text-xs font-black text-slate-900 leading-tight">100% Background Verified</span>
+              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Aadhaar & DL authenticated</span>
             </div>
-            <span className="text-[10px] font-bold text-slate-700 leading-tight">Verified Drivers</span>
-          </div>
 
-          <div className="flex flex-col items-center">
-            <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mb-1">
-              <Star className="w-5 h-5 fill-current" />
+            <div className="flex flex-col items-center p-2 rounded-xl bg-slate-50 border border-slate-100">
+              <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mb-1.5 shadow-xs">
+                <Sparkles className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <span className="text-xs font-black text-slate-900 leading-tight">Transparent Pricing</span>
+              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Zero surge pricing</span>
             </div>
-            <span className="text-[10px] font-bold text-slate-700 leading-tight">Customer Ratings</span>
-          </div>
 
-          <div className="flex flex-col items-center">
-            <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-1">
-              <MapPin className="w-5 h-5" />
+            <div className="flex flex-col items-center p-2 rounded-xl bg-slate-50 border border-slate-100">
+              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mb-1.5 shadow-xs">
+                <span className="font-mono font-black text-xs">#ID</span>
+              </div>
+              <span className="text-xs font-black text-slate-900 leading-tight">6-Digit Driver Code</span>
+              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Tracking accountability</span>
             </div>
-            <span className="text-[10px] font-bold text-slate-700 leading-tight">Distance Search</span>
-          </div>
 
-          <div className="flex flex-col items-center">
-            <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center mb-1">
-              <AlertTriangle className="w-5 h-5" />
+            <div className="flex flex-col items-center p-2 rounded-xl bg-slate-50 border border-slate-100">
+              <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center mb-1.5 shadow-xs">
+                <Headphones className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <span className="text-xs font-black text-slate-900 leading-tight">Direct Phone Connection</span>
+              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Direct driver-owner calling</span>
             </div>
-            <span className="text-[10px] font-bold text-slate-700 leading-tight">SOS Emergency</span>
-          </div>
 
-          <div className="flex flex-col items-center">
-            <div className="w-10 h-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center mb-1">
-              <Headphones className="w-5 h-5" />
+            <div className="col-span-2 sm:col-span-1 flex flex-col items-center p-2 rounded-xl bg-slate-50 border border-slate-100">
+              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center mb-1.5 shadow-xs">
+                <Clock className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <span className="text-xs font-black text-slate-900 leading-tight">15-Min Rapid Dispatch</span>
+              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Quick arrival across Hyd</span>
             </div>
-            <span className="text-[10px] font-bold text-slate-700 leading-tight">24/7 Support</span>
-          </div>
 
+          </div>
         </div>
 
-        {/* NEARBY DRIVERS LIST SECTION */}
+        {/* NEARBY DRIVERS LIST SECTION WITH REAL-TIME FILTER CHIPS (Section 4.1.4) */}
         <section className="pt-2">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <div>
               <h2 className="text-xl font-black text-navy-900">Drivers Near You</h2>
-              <p className="text-xs text-slate-500 font-medium">Sorted by distance from your location</p>
+              <p className="text-xs text-slate-500 font-medium">Verified professional drivers in Hyderabad</p>
             </div>
             <button
               onClick={() => navigate('/find-drivers')}
-              className="text-xs font-bold text-brand-600 hover:underline flex items-center gap-1"
+              className="text-xs font-bold text-brand-600 hover:underline flex items-center gap-1 self-start sm:self-auto"
             >
               View All ({drivers.length})
             </button>
           </div>
 
+          {/* REAL-TIME FILTER CHIPS (Section 4.1.4) */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none mb-3">
+            {[
+              { id: 'all', label: 'All Drivers' },
+              { id: 'top_rated', label: 'Top Rated (4.8+)' },
+              { id: 'nearby', label: 'Nearby (<5km)' },
+              { id: 'available', label: 'Immediate Available' },
+            ].map(chip => (
+              <button
+                key={chip.id}
+                onClick={() => setActiveFilterChip(chip.id as any)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap transition-all shadow-xs ${
+                  activeFilterChip === chip.id
+                    ? 'bg-slate-900 text-white shadow-md'
+                    : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50'
+                }`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {drivers.slice(0, 4).map(driver => (
+            {displayedDrivers.slice(0, 4).map(driver => (
               <DriverCard
                 key={driver.id}
                 driver={driver}

@@ -122,6 +122,51 @@ export const FindDriversPage: React.FC<FindDriversPageProps> = ({ userLocation, 
           </div>
         </div>
 
+        {/* 4 REAL-TIME FILTER CHIPS (Blueprint Section 4.1.4) */}
+        <div className="pt-2 border-t border-slate-100 flex items-center gap-2 overflow-x-auto scrollbar-none">
+          <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider shrink-0 mr-1">Quick Filters:</span>
+          <button
+            onClick={() => setFilters({ ...filters, minRating: 0, maxDistance: 30, availableOnly: false })}
+            className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+              filters.minRating === 0 && filters.maxDistance >= 25 && !filters.availableOnly
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            All Drivers
+          </button>
+          <button
+            onClick={() => setFilters({ ...filters, minRating: 4.8 })}
+            className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+              filters.minRating === 4.8
+                ? 'bg-amber-500 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            Top Rated (4.8+)
+          </button>
+          <button
+            onClick={() => setFilters({ ...filters, maxDistance: 5 })}
+            className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+              filters.maxDistance === 5
+                ? 'bg-brand-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            Nearby (&lt;5km)
+          </button>
+          <button
+            onClick={() => setFilters({ ...filters, availableOnly: !filters.availableOnly })}
+            className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+              filters.availableOnly
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            Immediate Available
+          </button>
+        </div>
+
         {/* CUSTOM RADIUS FILTER SECTION (UP TO 30 KM) */}
         <div className="pt-4 border-t border-slate-100 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">

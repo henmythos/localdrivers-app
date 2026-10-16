@@ -53,7 +53,7 @@ export const AdminDriversPage: React.FC = () => {
       status: putOnHold ? 'Payment Due' : selectedDriverForPayment.status,
     });
 
-    setActionMsg(`✓ Saved custom payment link & ₹${paymentAmount} fee for ${selectedDriverForPayment.name}. Reflected on driver dashboard.`);
+    setActionMsg(`Saved custom payment link & ₹${paymentAmount} fee for ${selectedDriverForPayment.name}. Reflected on driver dashboard.`);
     setSelectedDriverForPayment(null);
     loadDrivers();
     setTimeout(() => setActionMsg(null), 5000);
@@ -64,7 +64,7 @@ export const AdminDriversPage: React.FC = () => {
     if (isCurrentlyHold) {
       driversService.payCommissionFee(driver.id, driver.pendingCommissionFee || 50);
       driversService.toggleHold(driver.id, false);
-      setActionMsg(`✓ Released ${driver.name}'s profile. Driver is now active online in customer search.`);
+      setActionMsg(`Released ${driver.name}'s profile. Driver is now active online in customer search.`);
     } else {
       driversService.toggleHold(driver.id, true);
       setActionMsg(`Paused ${driver.name}'s profile on Hold. Driver is hidden from customer search.`);
@@ -114,7 +114,7 @@ export const AdminDriversPage: React.FC = () => {
       isHold: false
     });
 
-    setActionMsg(`✓ Approved all documents & activated driver ${driver.name} (#${driver.driverCode}).`);
+    setActionMsg(`Approved all documents & activated driver ${driver.name} (#${driver.driverCode}).`);
     loadDrivers();
     if (selectedDriverForDocs?.id === driverId) {
       const refreshed = dbService.getDriverById(driverId);
@@ -154,7 +154,7 @@ export const AdminDriversPage: React.FC = () => {
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Partner Driver Roster & Payment Links</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Send custom payment links to driver dashboards for unholding accounts & platform commission clearance
+            Send custom payment links to driver dashboards for unholding accounts & platform fee clearance
           </p>
         </div>
 
@@ -169,7 +169,7 @@ export const AdminDriversPage: React.FC = () => {
       {actionMsg && (
         <div className="mb-6 p-4 bg-slate-900 text-white text-xs font-bold rounded-2xl shadow-lg flex items-center justify-between animate-in fade-in">
           <span>{actionMsg}</span>
-          <button onClick={() => setActionMsg(null)} className="text-slate-400 hover:text-white font-mono">✕</button>
+          <button onClick={() => setActionMsg(null)} className="text-slate-400 hover:text-white font-bold text-xs">Close</button>
         </div>
       )}
 
@@ -213,7 +213,7 @@ export const AdminDriversPage: React.FC = () => {
                 <th className="p-4">City / Area</th>
                 <th className="p-4">Experience</th>
                 <th className="p-4">Rating</th>
-                <th className="p-4">Commission Due</th>
+                <th className="p-4">Platform Fee Due</th>
                 <th className="p-4">Payment Link</th>
                 <th className="p-4">Visibility Status</th>
                 <th className="p-4 text-right">Actions</th>
@@ -241,7 +241,10 @@ export const AdminDriversPage: React.FC = () => {
                     </td>
                     <td className="p-4 font-medium text-slate-700">{driver.area}, {driver.city}</td>
                     <td className="p-4 font-medium text-slate-700">{driver.experienceYears} Yrs</td>
-                    <td className="p-4 font-bold text-amber-500">{driver.rating} ★</td>
+                    <td className="p-4 font-bold text-amber-500 flex items-center gap-1">
+                      <Star className="w-3.5 h-3.5 fill-current inline" />
+                      <span>{driver.rating}</span>
+                    </td>
                     
                     <td className="p-4">
                       {driver.pendingCommissionFee && driver.pendingCommissionFee > 0 ? (
@@ -377,7 +380,7 @@ export const AdminDriversPage: React.FC = () => {
             <form onSubmit={handleSavePaymentLink} className="space-y-4">
               <div>
                 <label className="text-xs font-extrabold text-slate-700 block mb-1">
-                  Commission / Unhold Fee Amount (₹)
+                  Platform Fee / Unhold Amount (₹)
                 </label>
                 <input
                   type="number"

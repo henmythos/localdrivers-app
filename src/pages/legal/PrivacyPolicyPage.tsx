@@ -86,6 +86,14 @@ export const PrivacyPolicyPage: React.FC = () => {
               <p>Website: https://localdrivers.in</p>
               <p>Location: Road No. 36, Jubilee Hills, Hyderabad, Telangana 500033</p>
             </div>
+            <div className="pt-2">
+              <Link
+                to="/data-deletion"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-red-600 hover:text-red-700 underline"
+              >
+                Submit an Account & Data Deletion Request
+              </Link>
+            </div>
           </section>
 
         </div>

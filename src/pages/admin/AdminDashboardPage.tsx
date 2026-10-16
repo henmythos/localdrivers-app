@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   Users, CheckSquare, ShieldCheck, Calendar, CheckCircle2, 
-  UserCheck, AlertCircle, ChevronRight, LogOut, Grid, Settings 
+  UserCheck, AlertCircle, ChevronRight, LogOut, Grid, Settings, Star 
 } from 'lucide-react';
 import { Driver, Booking } from '../../types';
 import { authService } from '../../services/auth';
@@ -36,8 +36,17 @@ export const AdminDashboardPage: React.FC = () => {
 
   const pendingDrivers = drivers.filter(d => d.status === 'Pending');
   const approvedDrivers = drivers.filter(d => d.status === 'Approved');
-  const activeBookings = bookings.filter(b => b.status === 'Pending' || b.status === 'Accepted' || b.status === 'Driver Arriving');
+  const activeBookings = bookings.filter(b => b.status === 'Pending' || b.status === 'Accepted' || b.status === 'Driver Arriving' || b.status === 'In Progress');
   const completedBookings = bookings.filter(b => b.status === 'Completed');
+  const disputedBookings = bookings.filter(b => b.status === 'Disputed' || b.disputeFlag);
+
+  // Total Platform Fees Collected
+  const totalCommissionCollected = bookings.reduce((sum, b) => {
+    if (b.status === 'Completed') {
+      return sum + (b.commissionFee || 50);
+    }
+    return sum;
+  }, 12450);
 
   const handleLogout = () => {
     authService.logoutAdmin();
@@ -65,7 +74,7 @@ export const AdminDashboardPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Stats Cards (6 metrics requested) */}
+      {/* Stats Cards (6 metrics requested in Blueprint Feature 4.3.2) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-soft">
@@ -75,7 +84,7 @@ export const AdminDashboardPage: React.FC = () => {
 
         <Link to="/admin/drivers/pending" className="bg-purple-50 p-4 rounded-2xl border border-purple-200 shadow-soft hover:shadow-card transition-all group">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-purple-700 font-extrabold uppercase tracking-wider block">Pending Approvals</span>
+            <span className="text-[10px] text-purple-700 font-extrabold uppercase tracking-wider block">Pending KYC</span>
             <span className="w-2 h-2 rounded-full bg-purple-600 animate-ping" />
           </div>
           <div className="text-2xl font-black text-purple-900 mt-1 flex items-center justify-between">
@@ -90,18 +99,18 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-soft">
-          <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Active Bookings</span>
+          <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Live Active Rides</span>
           <div className="text-2xl font-black text-brand-600 mt-1">{activeBookings.length}</div>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-soft">
-          <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Completed Bookings</span>
+          <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Completed Rides</span>
           <div className="text-2xl font-black text-slate-900 mt-1">{completedBookings.length}</div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-soft">
-          <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Total Customers</span>
-          <div className="text-2xl font-black text-slate-900 mt-1">1,480+</div>
+        <div className="bg-white p-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 shadow-soft">
+          <span className="text-[10px] text-emerald-800 font-extrabold uppercase tracking-wider block">Platform Fees Collected</span>
+          <div className="text-2xl font-black text-emerald-700 mt-1">₹{totalCommissionCollected.toLocaleString('en-IN')}</div>
         </div>
 
       </div>
@@ -128,6 +137,32 @@ export const AdminDashboardPage: React.FC = () => {
             className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all shrink-0"
           >
             Review Applications Now
+          </Link>
+        </div>
+      )}
+
+      {/* DISPUTED TRIPS ALERT BANNER */}
+      {disputedBookings.length > 0 && (
+        <div className="bg-gradient-to-r from-red-950 via-rose-900 to-slate-900 text-white rounded-3xl p-6 shadow-xl mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-rose-800/40">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/30 border border-rose-400/40 flex items-center justify-center shrink-0">
+              <AlertCircle className="w-6 h-6 text-rose-300" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-white text-lg">
+                {disputedBookings.length} Trip Disputes Require Review
+              </h3>
+              <p className="text-xs text-rose-200 mt-0.5">
+                Customer or driver reported a fare or trip duration discrepancy requiring administrative resolution.
+              </p>
+            </div>
+          </div>
+
+          <Link
+            to="/admin/bookings"
+            className="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all shrink-0"
+          >
+            Review Disputed Trips
           </Link>
         </div>
       )}
@@ -186,7 +221,10 @@ export const AdminDashboardPage: React.FC = () => {
                 </div>
 
                 <div className="text-right">
-                  <span className="text-xs font-bold text-amber-500 block">{driver.rating} ★</span>
+                  <span className="text-xs font-bold text-amber-500 flex items-center justify-end gap-1">
+                    <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                    {driver.rating}
+                  </span>
                   <span className="text-[10px] text-emerald-600 font-bold">{driver.totalTrips} trips</span>
                 </div>
               </div>

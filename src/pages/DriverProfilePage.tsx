@@ -189,8 +189,9 @@ export const DriverProfilePage: React.FC = () => {
           <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-soft">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-black text-slate-900 text-lg">Customer Reviews</h3>
-              <span className="text-xs font-bold text-amber-500 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
-                {driver.rating} ★ Rating
+              <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200 flex items-center gap-1">
+                <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                <span>{driver.rating} Rating</span>
               </span>
             </div>
 

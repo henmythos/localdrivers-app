@@ -49,8 +49,8 @@ export const AboutPage: React.FC = () => {
                 <span className="text-xs text-slate-500">Every driver undergoes Aadhaar identity and driving licence authentication.</span>
               </div>
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
-                <span className="font-extrabold text-slate-900 block">Transparent 3-5% Fee</span>
-                <span className="text-xs text-slate-500">Fair commissions ensuring driver satisfaction and zero hidden charges.</span>
+                <span className="font-extrabold text-slate-900 block">Transparent Pricing</span>
+                <span className="text-xs text-slate-500">Predictable rates with zero surge pricing and direct driver settlement.</span>
               </div>
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
                 <span className="font-extrabold text-slate-900 block">Unique 6-Digit Driver Code</span>

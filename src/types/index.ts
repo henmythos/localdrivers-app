@@ -1,29 +1,92 @@
-export type ServiceType = 
-  | 'City Driver' 
-  | 'Outstation Driver' 
-  | 'Monthly Driver' 
-  | 'Personal Driver' 
-  | 'VIP Driver' 
+export type ServiceType =
+  | 'City Driver'
+  | 'Outstation Driver'
+  | 'Monthly Driver'
+  | 'Personal Driver'
+  | 'VIP Driver'
   | 'Escort Driver';
 
 export type DriverStatus = 'Approved' | 'Pending' | 'Rejected' | 'Hold' | 'Payment Due';
 
-export type BookingStatus = 'Pending' | 'Accepted' | 'Driver Arriving' | 'Completed' | 'Cancelled';
+export type BookingStatus =
+  | 'Pending'
+  | 'Accepted'
+  | 'Driver Arriving'
+  | 'In Progress'
+  | 'Completed'
+  | 'Cancelled'
+  | 'Disputed';
 
 export interface DocumentItem {
   id: string;
-  type: 
-    | 'Profile Photo Selfie' 
-    | 'Aadhaar Card' // legacy backwards-compatible
-    | 'Aadhaar Card (Front)' 
-    | 'Aadhaar Card (Back)' 
-    | 'Driving Licence' // legacy backwards-compatible
-    | 'Driving Licence (Front)' 
-    | 'Driving Licence (Back)';
+  type:
+  | 'Profile Photo Selfie'
+  | 'Aadhaar Card' // legacy backwards-compatible
+  | 'Aadhaar Card (Front)'
+  | 'Aadhaar Card (Back)'
+  | 'Driving Licence' // legacy backwards-compatible
+  | 'Driving Licence (Front)'
+  | 'Driving Licence (Back)';
   status: 'Verified' | 'Under Review' | 'Rejected' | 'Not Uploaded';
   url?: string;
   rejectionReason?: string;
   uploadedAt?: string;
+}
+
+export interface GeoLocation {
+  latitude: number;
+  longitude: number;
+  accuracy?: number; // GPS accuracy radius in meters
+  address?: string;
+  recordedAt?: string; // Server UTC ISO timestamp
+  source?: 'gps' | 'map_pin' | 'address_search' | 'unavailable';
+}
+
+export interface TripStop {
+  id: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface TripAuditRecord {
+  id: string;
+  timestamp: string;
+  adminEmail: string;
+  reason: string;
+  changes: string;
+}
+
+export interface PricingPolicySnapshot {
+  serviceType: ServiceType;
+  baseHourlyRate: number; // in INR
+  hourlyRate?: number; // alias in INR
+  minimumHours: number;
+  partialHourRule: 'ceil_hour' | 'exact_fraction' | '15_min_block';
+  daily24hRate: number; // in INR
+  overnightCharge: number; // in INR (10 PM - 6 AM)
+  multiDayDiscountPercent: number; // e.g., 10%
+  includedKmPerDay?: number;
+  extraPerKmRate?: number;
+  waitingChargePerHour?: number;
+  overtimePerHourRate?: number;
+  taxPercent?: number;
+}
+
+export interface AdminPricingConfig {
+  hourlyRate: number; // e.g., ₹200/hr
+  minimumHours: number; // e.g., 2
+  minimumBookingDurationHours: number; // e.g., 2
+  partialHourRule: 'ceil_hour' | 'exact_fraction' | '15_min_block';
+  dailyRate24h: number; // e.g., ₹2000/day
+  multiDayDiscountPercent: number; // e.g., 10%
+  outstationRatePerDay: number; // e.g., ₹2200/day
+  outstationIncludedKmPerDay: number; // e.g., 250 km
+  outstationExtraKmRate: number; // e.g., ₹12/km
+  waitingChargePerHour: number; // e.g., ₹99/hr
+  nightAllowance: number; // e.g., ₹300
+  reminderIntervalMinutes: number; // e.g., 60 mins
+  locationFreshnessMinutes: number; // e.g., 30 mins
 }
 
 export interface Driver {
@@ -54,6 +117,10 @@ export interface Driver {
   documents: DocumentItem[];
   description: string;
   joinedDate: string;
+  // GPS & Availability
+  lastKnownLocation?: GeoLocation;
+  lastLocationUpdatedAt?: string;
+  activeBookingId?: string;
 }
 
 export interface ServiceCategory {
@@ -87,11 +154,71 @@ export interface Booking {
   time: string;
   notes?: string;
   estimatedFare: number;
+  commissionFee?: number;
+  commissionSettled?: boolean;
   status: BookingStatus;
   createdAt: string;
   updatedAt: string;
   assignedAt?: string;
   attemptedDriverIds?: string[];
+
+  // Route & OpenStreetMap Coordinates
+  pickupCoords?: { latitude: number; longitude: number };
+  destinationCoords?: { latitude: number; longitude: number };
+  intermediateStops?: TripStop[];
+  stops?: TripStop[]; // alias
+  isReturnTrip?: boolean;
+  durationHours?: number; // duration in hours
+  estimatedDistanceKm?: number; // one-way or planned total
+  estimatedReturnDistanceKm?: number;
+  estimatedDurationMinutes?: number;
+  routePolyline?: [number, number][]; // [lat, lng] array for Leaflet
+  outboundPolyline?: [number, number][];
+  returnPolyline?: [number, number][];
+
+  // Duration & Destination Waiting Specifications
+  expectedWaitingHours?: number;
+  expectedTotalDurationHours?: number;
+  expectedDrivingMinutes?: number;
+  estimatedOutboundDistanceKm?: number;
+  estimatedOutboundDurationMinutes?: number;
+  estimatedReturnDurationMinutes?: number;
+  returnJourneyOption?: 'same_day' | 'after_waiting' | 'different_date' | 'one_way';
+  billingMethod?: 'hourly' | 'daily_package' | 'multi_day' | 'package';
+  estimatedTimeBasedCharge?: number;
+  estimatedDistanceBasedCharge?: number;
+  estimatedTaxesAndFees?: number;
+
+  // Authoritative Server Trip Execution & GPS
+  tripStartedAt?: string; // Server UTC ISO string
+  tripStartLocation?: GeoLocation;
+  tripCompletedAt?: string; // Server UTC ISO string
+  tripEndLocation?: GeoLocation;
+  elapsedSeconds?: number;
+  billableHours?: number;
+
+  // Distance & Odometer Verification
+  odometerStartKm?: number;
+  odometerEndKm?: number;
+  actualTraveledKm?: number;
+  distanceSource?: 'odometer' | 'driver_reported' | 'estimated_only';
+  distanceVerified?: boolean;
+
+  // Hourly / Daily Billing & Snapshot
+  pricingSnapshot?: PricingPolicySnapshot;
+  timeBasedCharge?: number;
+  distanceBasedCharge?: number;
+  nightCharges?: number;
+  finalFare?: number;
+
+  // Confirmations & Dispute Management
+  customerCompleted?: boolean;
+  driverCompleted?: boolean;
+  disputeFlag?: boolean;
+  disputeReason?: string;
+  reminderIntervalMinutes?: number;
+  lastReminderSentAt?: string;
+  auditHistory?: TripAuditRecord[];
 }
 
 export interface Review {

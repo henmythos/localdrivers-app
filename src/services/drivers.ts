@@ -128,8 +128,8 @@ export const driversService = {
   },
 
   // Driver actions
-  toggleOnline(id: string, isOnline: boolean): Driver | undefined {
-    return dbService.toggleDriverOnline(id, isOnline);
+  toggleOnline(id: string, isOnline: boolean, location?: any): Driver | undefined {
+    return dbService.toggleDriverOnline(id, isOnline, location);
   },
 
   updateProfile(id: string, updates: Partial<Driver>): Driver | undefined {

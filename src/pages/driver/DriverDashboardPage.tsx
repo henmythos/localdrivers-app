@@ -3,13 +3,15 @@ import { Link, useNavigate } from 'react-router-dom';
 import { 
   Power, ShieldCheck, Star, Calendar, Clock, MapPin, Navigation, 
   CheckCircle2, XCircle, LogOut, AlertTriangle, CreditCard, ExternalLink, RefreshCw,
-  Phone, Lock, Car, MessageSquare
+  Phone, Lock, Car, MessageSquare, Play, Square, Compass, X
 } from 'lucide-react';
 import { Driver, Booking } from '../../types';
 import { authService } from '../../services/auth';
 import { driversService } from '../../services/drivers';
 import { bookingsService } from '../../services/bookings';
 import { dbService } from '../../services/database';
+import { gpsService } from '../../services/gps';
+import { billingService } from '../../services/billing';
 
 export const DriverDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,6 +19,15 @@ export const DriverDashboardPage: React.FC = () => {
   const [driverBookings, setDriverBookings] = useState<Booking[]>([]);
   const [paymentSuccessMsg, setPaymentSuccessMsg] = useState<string | null>(null);
   const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
+
+  // Trip Start & End Modals State
+  const [startTripBooking, setStartTripBooking] = useState<Booking | null>(null);
+  const [odometerStartInput, setOdometerStartInput] = useState('');
+  const [isStartingTrip, setIsStartingTrip] = useState(false);
+
+  const [endTripBooking, setEndTripBooking] = useState<Booking | null>(null);
+  const [odometerEndInput, setOdometerEndInput] = useState('');
+  const [isEndingTrip, setIsEndingTrip] = useState(false);
 
   const loadData = () => {
     const state = authService.getAuthState();
@@ -44,40 +55,50 @@ export const DriverDashboardPage: React.FC = () => {
     };
   }, []);
 
-  if (!driver) return null;
-
-  const pendingRequests = driverBookings.filter(b => b.status === 'Pending');
-  const activeBookings = driverBookings.filter(b => b.status === 'Accepted' || b.status === 'Driver Arriving');
-  const completedTrips = driverBookings.filter(b => b.status === 'Completed');
-
   // Automatic 20-second timeout: automatically pass to next online driver if unaccepted
   useEffect(() => {
-    if (pendingRequests.length === 0) return;
-    pendingRequests.forEach(req => {
+    if (!driver) return;
+    const pending = driverBookings.filter(b => b.status === 'Pending');
+    if (pending.length === 0) return;
+    pending.forEach(req => {
       const assignedTime = new Date(req.assignedAt || req.createdAt).getTime();
       const elapsedSeconds = Math.floor((nowTimestamp - assignedTime) / 1000);
       if (elapsedSeconds >= 20) {
         bookingsService.passToNextDriver(req.id);
       }
     });
-  }, [nowTimestamp, pendingRequests]);
+  }, [nowTimestamp, driverBookings, driver]);
 
-  const totalEarnings = completedTrips.reduce((acc, curr) => acc + curr.estimatedFare, 3200);
+  if (!driver) return null;
+
+  const pendingRequests = driverBookings.filter(b => b.status === 'Pending');
+  const activeBookings = driverBookings.filter(b => b.status === 'Accepted' || b.status === 'Driver Arriving' || b.status === 'In Progress');
+  const completedTrips = driverBookings.filter(b => b.status === 'Completed');
+
+  const totalEarnings = completedTrips.reduce((acc, curr) => acc + (curr.finalFare || curr.estimatedFare), 3200);
   const pendingFee = driver.pendingCommissionFee || 0;
   const isHold = driver.isHold || pendingFee > 0 || driver.status === 'Hold' || driver.status === 'Payment Due';
 
-  const handleToggleOnline = () => {
+  const handleToggleOnline = async () => {
     if (isHold) {
-      alert('Your profile is currently on Hold / Payment Due. Please pay the ₹50 platform fee to go Online.');
+      alert('Your profile is currently on Hold / Payment Due. Please settle the outstanding platform fee to go Online.');
       return;
     }
-    const updated = driversService.toggleOnline(driver.id, !driver.isOnline);
+
+    const nextState = !driver.isOnline;
+    let geo = undefined;
+    if (nextState) {
+      // Capture GPS location when driver goes online
+      geo = await gpsService.captureEventLocation('Driver Online');
+    }
+
+    const updated = driversService.toggleOnline(driver.id, nextState, geo);
     if (updated) setDriver(updated);
   };
 
   const handleAcceptRequest = (bookingId: string) => {
     if (isHold) {
-      alert('Your profile is on Hold. Please pay the ₹50 platform fee to accept new bookings.');
+      alert('Your profile is on Hold. Please settle your platform fee to accept new bookings.');
       return;
     }
     bookingsService.updateStatus(bookingId, 'Accepted');
@@ -89,8 +110,33 @@ export const DriverDashboardPage: React.FC = () => {
     loadData();
   };
 
-  const handleCompleteRide = (bookingId: string) => {
-    bookingsService.updateStatus(bookingId, 'Completed');
+  // Start Trip Action (Captures Start GPS & Starts Authoritative Timer)
+  const handleConfirmStartTrip = async () => {
+    if (!startTripBooking) return;
+    setIsStartingTrip(true);
+
+    const startLocation = await gpsService.captureEventLocation('Trip Start');
+    const odoVal = odometerStartInput.trim() ? Number(odometerStartInput.trim()) : undefined;
+
+    bookingsService.startTrip(startTripBooking.id, startLocation, odoVal);
+    setIsStartingTrip(false);
+    setStartTripBooking(null);
+    setOdometerStartInput('');
+    loadData();
+  };
+
+  // End Trip Action (Captures End GPS & Finalizes Authoritative Billing)
+  const handleConfirmEndTrip = async () => {
+    if (!endTripBooking) return;
+    setIsEndingTrip(true);
+
+    const endLocation = await gpsService.captureEventLocation('Trip End');
+    const odoVal = odometerEndInput.trim() ? Number(odometerEndInput.trim()) : undefined;
+
+    bookingsService.completeTrip(endTripBooking.id, endLocation, 'driver', odoVal);
+    setIsEndingTrip(false);
+    setEndTripBooking(null);
+    setOdometerEndInput('');
     loadData();
   };
 
@@ -98,7 +144,7 @@ export const DriverDashboardPage: React.FC = () => {
     const updated = driversService.payCommissionFee(driver.id, pendingFee || 50);
     if (updated) {
       setDriver(updated);
-      setPaymentSuccessMsg('✓ Payment Received! ₹50 fee paid. Your profile is now Active and Online for customer search.');
+      setPaymentSuccessMsg('Payment Received. Platform fee settled. Your profile is now Active and Online for customer search.');
       setTimeout(() => setPaymentSuccessMsg(null), 5000);
       loadData();
     }
@@ -148,6 +194,13 @@ export const DriverDashboardPage: React.FC = () => {
                 )}
                 <span className="text-xs text-slate-500">• {driver.area}, {driver.city}</span>
               </div>
+
+              {driver.lastKnownLocation?.address && (
+                <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <Compass className="w-3 h-3 text-brand-600 shrink-0" />
+                  <span>Last Location: {driver.lastKnownLocation.address}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -186,7 +239,7 @@ export const DriverDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* PLATFORM COMMISSION PAYMENT DUE CARD (Professional Partner Portal Style) */}
+      {/* PLATFORM FEE PAYMENT DUE CARD */}
       {isHold && (
         <div className="bg-white rounded-3xl p-6 shadow-md border-2 border-amber-400/80 mb-8 relative overflow-hidden">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
@@ -199,7 +252,7 @@ export const DriverDashboardPage: React.FC = () => {
                   <span>Action Required • Account Paused</span>
                 </div>
                 <h3 className="text-lg sm:text-xl font-black text-slate-900 leading-tight">
-                  Outstanding Platform Commission: ₹{pendingFee || 50}
+                  Outstanding Platform Fee: ₹{pendingFee || 50}
                 </h3>
                 <p className="text-xs text-slate-600 max-w-xl leading-relaxed font-medium">
                   Your driver profile is paused for customer discovery. Settle your last trip platform fee to reactivate your online status and resume receiving automated ride dispatches.
@@ -216,15 +269,13 @@ export const DriverDashboardPage: React.FC = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch gap-2.5 w-full md:w-auto shrink-0">
-              {/* OPEN ADMIN PAYMENT LINK */}
+              {/* OPEN UPI APP OR PAYMENT LINK */}
               <a
-                href={driver.paymentLinkUrl || `https://pay.localdrivers.in/upi?amount=${pendingFee || 50}&driver=${driver.driverCode || driver.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={`upi://pay?pa=8500274288@upi&pn=Localdrivers%20Hyderabad&am=${pendingFee || 50}&cu=INR&tn=Driver%20${driver.driverCode || driver.id}%20Platform%20Fee`}
                 className="px-5 py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
               >
                 <CreditCard className="w-4 h-4 text-white" />
-                Pay Dues (₹{pendingFee || 50})
+                Pay via UPI App (₹{pendingFee || 50})
               </a>
 
               {/* VERIFY & UNHOLD PROFILE */}
@@ -242,19 +293,10 @@ export const DriverDashboardPage: React.FC = () => {
 
       {/* Driver Performance Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-soft">
           <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Today's Earnings</span>
           <div className="text-2xl font-black text-slate-900 mt-1 flex items-center">
-            ₹{totalEarnings.toLocaleString()}
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-soft">
-          <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Driver Rating</span>
-          <div className="text-2xl font-black text-slate-900 mt-1 flex items-center gap-1">
-            <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
-            {driver.rating}
+            <span>₹{totalEarnings}</span>
           </div>
         </div>
 
@@ -266,47 +308,42 @@ export const DriverDashboardPage: React.FC = () => {
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-soft">
-          <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Pending Fee Due</span>
-          <div className={`text-2xl font-black mt-1 ${pendingFee > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-            ₹{pendingFee}
+          <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Driver Rating</span>
+          <div className="text-2xl font-black text-slate-900 mt-1 flex items-center gap-1.5">
+            <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
+            <span>{driver.rating}</span>
           </div>
         </div>
 
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-soft">
+          <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Active Jobs</span>
+          <div className="text-2xl font-black text-brand-600 mt-1">
+            {activeBookings.length}
+          </div>
+        </div>
       </div>
 
-      {/* DRIVER PARTNER 24/7 HELPLINE & DISPATCH ASSISTANCE BANNER */}
-      <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-3xl p-5 sm:p-6 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-slate-700 shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
-            <Phone className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-black text-white">Driver Partner Emergency & Dispatch Support</h3>
-              <span className="text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                24/7 Active
-              </span>
-            </div>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Facing customer pickup delays, payment disputes, or app queries? Call our dedicated driver hotline.
-            </p>
-          </div>
+      {/* 24/7 HELPLINE BANNER */}
+      <div className="mb-6 bg-slate-900 text-white p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5">
+          <Phone className="w-4 h-4 text-emerald-400" />
+          <span>24/7 Driver Support & Dispatch Desk: Road No. 36, Jubilee Hills</span>
         </div>
         <a
           href="tel:+918500274288"
-          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-600/30 transition-all shrink-0"
+          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl transition-colors flex items-center gap-1.5"
         >
-          <Phone className="w-4 h-4" />
+          <Phone className="w-3.5 h-3.5" />
           <span>Driver Helpline: 85002 74288</span>
         </a>
       </div>
 
-      {/* ACTIVE & CONFIRMED BOOKINGS (AFTER ACCEPTANCE) */}
+      {/* ACTIVE & CONFIRMED BOOKINGS (START TRIP / IN PROGRESS / COMPLETE) */}
       {activeBookings.length > 0 && (
         <div className="space-y-4 mb-8">
           <div className="flex items-center justify-between">
             <h3 className="font-black text-slate-900 text-lg flex items-center gap-2">
-              <span>Active Confirmed Trips (In-Progress)</span>
+              <span>Active Confirmed Trips</span>
               <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full">
                 Phone Unlocked
               </span>
@@ -318,6 +355,8 @@ export const DriverDashboardPage: React.FC = () => {
             {activeBookings.map(b => {
               const cleanDigits = (b.customerPhone || '').replace(/\D/g, '');
               const whatsappUrl = `https://wa.me/91${cleanDigits.slice(-10)}`;
+              const isTripActive = b.status === 'In Progress';
+              const liveBilling = billingService.calculateTripCharges(b, nowTimestamp);
 
               return (
                 <div key={b.id} className="bg-white rounded-3xl p-6 border-2 border-emerald-500/80 shadow-xl space-y-4 relative overflow-hidden">
@@ -329,16 +368,55 @@ export const DriverDashboardPage: React.FC = () => {
                     </div>
 
                     <div className="text-right">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Fare Amount</span>
-                      <span className="text-xl font-black text-emerald-600">₹{b.estimatedFare}</span>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">
+                        {isTripActive ? 'Provisional Total' : 'Estimated Fare'}
+                      </span>
+                      <span className="text-xl font-black text-emerald-600">
+                        ₹{isTripActive ? liveBilling.totalEstimatedOrFinal : b.estimatedFare}
+                      </span>
                     </div>
                   </div>
+
+                  {/* LIVE TIMER CARD IF IN PROGRESS */}
+                  {isTripActive && (
+                    <div className="p-4 bg-brand-50/80 border-2 border-brand-500 rounded-2xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] font-extrabold uppercase text-brand-800 tracking-wider block">
+                            Live Authoritative Trip Timer
+                          </span>
+                          <div className="text-2xl font-black font-mono text-slate-900 mt-0.5">
+                            {liveBilling.formattedElapsed}
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-brand-900 block">
+                            {liveBilling.billableHours} Billable Hours
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            @ ₹{b.pricingSnapshot?.baseHourlyRate || 200}/hr
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-[11px] text-brand-900 font-semibold bg-brand-100/70 p-2 rounded-xl border border-brand-200">
+                        Timer continues continuously during destination waiting, overnight stays, and return travel until ride completion.
+                      </div>
+
+                      {b.tripStartLocation?.address && (
+                        <div className="pt-1 text-[11px] text-slate-600 font-medium">
+                          Start GPS: {b.tripStartLocation.address}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* UNLOCKED CUSTOMER PHONE & DIRECT CONTACT BUTTONS */}
                   <div className="bg-emerald-50/80 p-3.5 rounded-2xl border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <span className="text-[10px] font-extrabold uppercase text-emerald-800 block">
-                        Verified Customer Phone (Unlocked)
+                        Customer Mobile (Direct Call)
                       </span>
                       <span className="text-sm font-black font-mono text-slate-900 flex items-center gap-1.5 mt-0.5">
                         <Phone className="w-4 h-4 text-emerald-600" />
@@ -370,36 +448,54 @@ export const DriverDashboardPage: React.FC = () => {
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
                     <div className="flex items-start gap-2">
                       <MapPin className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
-                      <span className="font-bold text-slate-900">Pickup Location: <span className="font-normal text-slate-700">{b.pickupLocation}</span></span>
+                      <span className="font-bold text-slate-900">Pickup: <span className="font-normal text-slate-700">{b.pickupLocation}</span></span>
                     </div>
                     <div className="flex items-start gap-2">
                       <Navigation className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                       <span className="font-bold text-slate-900">Destination: <span className="font-normal text-slate-700">{b.destinationLocation}</span></span>
                     </div>
-                    
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-slate-700 pt-2 border-t border-slate-200/60 text-[11px]">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Expected Duration:</span>
+                        <strong className="text-slate-900">{b.expectedTotalDurationHours || b.durationHours || 2} Hours</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Destination Waiting:</span>
+                        <strong className="text-amber-900">{b.expectedWaitingHours !== undefined ? `${b.expectedWaitingHours} Hours` : '0 Hours'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Road Route:</span>
+                        <strong className="text-slate-900">{b.estimatedDistanceKm || 10} km {b.isReturnTrip ? '(Round)' : ''}</strong>
+                      </div>
+                    </div>
+
                     {b.notes && (
-                      <div className="flex items-start gap-2 pt-2 border-t border-slate-200/60">
-                        <Car className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
-                        <span className="font-bold text-slate-900">Car / Vehicle Notes: <span className="font-normal text-slate-700 italic">"{b.notes}"</span></span>
+                      <div className="pt-1 text-[11px] text-slate-600 italic">
+                        "{b.notes}"
                       </div>
                     )}
-
-                    <div className="flex items-center gap-4 text-slate-500 pt-1 border-t border-slate-200/60">
-                      <span>Date: <strong>{b.date}</strong></span>
-                      <span>Reporting: <strong>{b.time}</strong></span>
-                      <span>Service: <strong>{b.serviceTitle}</strong></span>
-                    </div>
                   </div>
 
-                  {/* COMPLETE RIDE BUTTON */}
-                  <div className="pt-2 flex justify-end">
-                    <button
-                      onClick={() => handleCompleteRide(b.id)}
-                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      Complete Ride & Collect ₹{b.estimatedFare}
-                    </button>
+                  {/* ACTION CONTROLS: START TRIP vs COMPLETE TRIP */}
+                  <div className="pt-2">
+                    {!isTripActive ? (
+                      <button
+                        onClick={() => setStartTripBooking(b)}
+                        className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
+                      >
+                        <Play className="w-4 h-4 fill-white" />
+                        Start Trip (Record GPS & Start Timer)
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setEndTripBooking(b)}
+                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
+                      >
+                        <Square className="w-4 h-4 fill-white" />
+                        Complete Ride & Finalize Bill
+                      </button>
+                    )}
                   </div>
 
                 </div>
@@ -409,7 +505,7 @@ export const DriverDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* PENDING BOOKING REQUESTS SECTION (BEFORE ACCEPTANCE) */}
+      {/* PENDING BOOKING REQUESTS SECTION */}
       <div className="space-y-6 mb-8">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
@@ -429,7 +525,6 @@ export const DriverDashboardPage: React.FC = () => {
                 ? `+91 ${cleanDigits.slice(-10, -6)}* *****`
                 : '+91 ***** *****';
 
-              // Calculate remaining seconds for 20s auto-pass timeout
               const assignedTime = new Date(req.assignedAt || req.createdAt).getTime();
               const elapsedSeconds = Math.floor((nowTimestamp - assignedTime) / 1000);
               const remainingSec = Math.max(0, 20 - elapsedSeconds);
@@ -438,9 +533,9 @@ export const DriverDashboardPage: React.FC = () => {
               return (
                 <div
                   key={req.id}
-                  className="bg-white rounded-3xl p-6 border-2 border-brand-500/80 shadow-2xl relative overflow-hidden space-y-4 animate-pulse-border"
+                  className="bg-white rounded-3xl p-6 border-2 border-brand-500/80 shadow-2xl relative overflow-hidden space-y-4"
                 >
-                  {/* 20-SECOND COUNTDOWN PROGRESS BAR */}
+                  {/* COUNTDOWN PROGRESS BAR */}
                   <div className="absolute top-0 left-0 right-0 h-2 bg-slate-100">
                     <div
                       className={`h-full transition-all duration-1000 ease-linear ${
@@ -448,133 +543,198 @@ export const DriverDashboardPage: React.FC = () => {
                           ? 'bg-emerald-500'
                           : remainingSec > 5
                           ? 'bg-amber-500'
-                          : 'bg-red-600'
+                          : 'bg-red-500'
                       }`}
                       style={{ width: `${progressPct}%` }}
                     />
                   </div>
 
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="font-mono font-extrabold text-xs text-brand-700">{req.id}</span>
-                    
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 animate-pulse">
-                        <Clock className="w-3 h-3" />
-                        Auto-Pass in {remainingSec}s
-                      </span>
-                      <span className="bg-brand-600 text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
-                        {req.serviceTitle}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
                     <div>
-                      <h3 className="font-black text-slate-900 text-xl">{req.customerName}</h3>
-                      
-                      {/* MASKED PHONE NOTICE BEFORE ACCEPTANCE */}
-                      <div className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 text-amber-900 border border-amber-200/80 text-xs font-mono font-bold">
-                        <Lock className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Mobile: {maskedPhone}</span>
-                        <span className="text-[10px] text-amber-700 font-sans font-normal ml-1">
-                          (Unlocked on acceptance)
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-xs text-brand-700 bg-brand-50 px-2 py-0.5 rounded-lg border border-brand-200">
+                          {req.id}
+                        </span>
+                        <span className="text-xs font-extrabold text-slate-800">
+                          {req.serviceTitle}
                         </span>
                       </div>
+                      <h3 className="text-xl font-black text-slate-900 mt-1">{req.customerName}</h3>
                     </div>
 
-                    <div className="text-left md:text-right">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Estimated Fare</span>
-                      <span className="text-3xl font-black text-emerald-600">₹{req.estimatedFare}</span>
+                    <div className="text-left sm:text-right">
+                      <div className="text-2xl font-black text-emerald-600">₹{req.estimatedFare}</div>
+                      <span className="text-[11px] font-bold text-slate-500 block">
+                        Estimated road: {req.estimatedDistanceKm || 10} km
+                      </span>
                     </div>
                   </div>
 
-                  {/* ROUTE & VEHICLE DETAILS ("FROM WHERE TO WHERE & WHICH CAR") */}
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3 text-xs">
-                    
-                    {/* FROM WHERE (PICKUP) */}
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-6 h-6 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center shrink-0 font-extrabold text-[11px] mt-0.5">
-                        A
-                      </div>
-                      <div>
-                        <span className="font-extrabold text-slate-900 uppercase text-[10px] block text-brand-700 tracking-wider">
-                          Pickup Location (From Where):
-                        </span>
-                        <span className="font-bold text-slate-900 text-xs">{req.pickupLocation}</span>
-                      </div>
+                  <div className="bg-amber-50/70 border border-amber-200/80 p-3 rounded-2xl flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-mono font-bold text-amber-900">
+                      <Lock className="w-4 h-4 text-amber-600" />
+                      <span>Customer Phone: {maskedPhone}</span>
+                    </div>
+                    <span className="text-[10px] text-amber-800 font-bold">Unlocks on Accept</span>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2 text-xs text-slate-700">
+                    <div className="flex items-start gap-2">
+                      <MapPin className="w-4 h-4 text-brand-600 shrink-0 mt-0.5" />
+                      <span><strong>Pickup:</strong> {req.pickupLocation}</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Navigation className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><strong>Drop-off:</strong> {req.destinationLocation}</span>
                     </div>
 
-                    {/* TO WHERE (DESTINATION) */}
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 font-extrabold text-[11px] mt-0.5">
-                        B
-                      </div>
-                      <div>
-                        <span className="font-extrabold text-slate-900 uppercase text-[10px] block text-emerald-700 tracking-wider">
-                          Destination (To Where):
-                        </span>
-                        <span className="font-bold text-slate-900 text-xs">{req.destinationLocation}</span>
-                      </div>
-                    </div>
-
-                    {/* WHICH CAR HE NEEDS TO DRIVE */}
-                    <div className="flex items-start gap-2.5 pt-2 border-t border-slate-200/60 bg-purple-50/70 p-3 rounded-xl border-purple-100">
-                      <Car className="w-4.5 h-4.5 text-purple-700 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-extrabold text-purple-900 uppercase text-[10px] block">
-                          Vehicle / Booking Type:
-                        </span>
-                        <span className="font-bold text-slate-900">
-                          {req.serviceTitle} — {req.notes ? req.notes : 'Customer Personal Vehicle'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-4 text-slate-600 pt-2 border-t border-slate-200/60 text-[11px]">
-                      <span>Date: <strong className="text-slate-900">{req.date}</strong></span>
-                      <span>Reporting Time: <strong className="text-slate-900">{req.time}</strong></span>
-                      <span>Status: <strong className="text-amber-600 uppercase font-extrabold">Pending Acceptance</strong></span>
+                    <div className="flex items-center justify-between text-slate-600 pt-1.5 border-t border-slate-200 text-[11px]">
+                      <span>Service Duration: <strong className="text-slate-900">{req.expectedTotalDurationHours || req.durationHours || 2} Hours</strong></span>
+                      <span>Waiting: <strong className="text-amber-900">{req.expectedWaitingHours !== undefined ? `${req.expectedWaitingHours} Hours` : '0 Hours'}</strong></span>
+                      {req.isReturnTrip && <span className="font-bold text-purple-700">Round Trip</span>}
                     </div>
                   </div>
 
-                  {/* PRIVACY NOTICE & ACCEPT / PASS ACTION BUTTONS */}
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
-                    <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Accepting this ride will unlock customer mobile number & location.</span>
-                    </p>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => handleRejectRequest(req.id)}
-                        className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-700 font-extrabold text-xs rounded-xl border border-red-200 transition-colors flex items-center gap-1.5"
-                      >
-                        <XCircle className="w-4 h-4 text-red-600" />
-                        Pass to Next Driver
-                      </button>
-
-                      <button
-                        onClick={() => handleAcceptRequest(req.id)}
-                        className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        Accept Ride ({remainingSec}s)
-                      </button>
-                    </div>
+                  {/* ACTION BUTTONS */}
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <button
+                      onClick={() => handleRejectRequest(req.id)}
+                      className="py-3 px-4 rounded-xl border-2 border-slate-200 hover:bg-slate-50 text-slate-700 font-extrabold text-xs transition-colors"
+                    >
+                      Decline / Pass
+                    </button>
+                    <button
+                      onClick={() => handleAcceptRequest(req.id)}
+                      className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-lg transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Accept Booking ({remainingSec}s)
+                    </button>
                   </div>
-
                 </div>
               );
             })}
           </div>
         ) : (
-          <div className="p-8 text-center bg-white rounded-3xl border border-slate-200">
-            <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
-            <h4 className="font-bold text-slate-800 text-base">No Pending Requests</h4>
-            <p className="text-xs text-slate-500 mt-1">You're all caught up! New requests will pop up here instantly.</p>
+          <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center space-y-2">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+              Dispatch Radar Active
+            </span>
+            <p className="text-sm font-bold text-slate-800">
+              No pending customer requests currently in your zone.
+            </p>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              Stay Online with GPS enabled. New customer bookings in Hyderabad will alert you automatically.
+            </p>
           </div>
         )}
       </div>
+
+      {/* START TRIP MODAL */}
+      {startTripBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto">
+              <Play className="w-6 h-6 fill-brand-600" />
+            </div>
+
+            <div className="text-center">
+              <h3 className="text-lg font-black text-slate-900">Start Driver Service</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Have you arrived and boarded the customer's vehicle?
+              </p>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1 text-slate-700">
+              <div><strong>Customer:</strong> {startTripBooking.customerName}</div>
+              <div><strong>Pickup:</strong> {startTripBooking.pickupLocation}</div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Optional Starting Odometer Reading (km)
+              </label>
+              <input
+                type="number"
+                value={odometerStartInput}
+                onChange={e => setOdometerStartInput(e.target.value)}
+                placeholder="e.g. 45150"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono"
+              />
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Recommended for highway & outstation distance verification.
+              </span>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setStartTripBooking(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isStartingTrip}
+                onClick={handleConfirmStartTrip}
+                className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-extrabold shadow-md disabled:opacity-50"
+              >
+                {isStartingTrip ? 'Capturing GPS...' : 'Confirm & Start Trip'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* END TRIP MODAL */}
+      {endTripBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+              <Square className="w-6 h-6 fill-emerald-600" />
+            </div>
+
+            <div className="text-center">
+              <h3 className="text-lg font-black text-slate-900">Complete Trip & Finalize</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Service ended with customer. Record final GPS and duration.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Optional Final Odometer Reading (km)
+              </label>
+              <input
+                type="number"
+                value={odometerEndInput}
+                onChange={e => setOdometerEndInput(e.target.value)}
+                placeholder="e.g. 45280"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setEndTripBooking(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Continue Ride
+              </button>
+              <button
+                type="button"
+                disabled={isEndingTrip}
+                onClick={handleConfirmEndTrip}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-md disabled:opacity-50"
+              >
+                {isEndingTrip ? 'Recording GPS...' : 'Complete & Collect Fare'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
