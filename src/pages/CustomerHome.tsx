@@ -311,9 +311,14 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
               <p className="text-xs text-slate-500 max-w-sm">
                 Hyderabad's trusted on-demand driver booking platform. Your Driver. Your Journey.
               </p>
-              <p className="text-[11px] font-mono text-slate-500">
-                Support: <a href="mailto:localdrivers.in@gmail.com" className="font-bold text-brand-600 hover:underline">localdrivers.in@gmail.com</a>
-              </p>
+              <div className="text-[11px] font-mono text-slate-500 space-y-0.5">
+                <p>
+                  24/7 Helpline: <a href="tel:+918500274288" className="font-bold text-emerald-600 hover:underline">+91 85002 74288</a>
+                </p>
+                <p>
+                  Support: <a href="mailto:localdrivers.in@gmail.com" className="font-bold text-brand-600 hover:underline">localdrivers.in@gmail.com</a>
+                </p>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-2 gap-x-6 text-xs font-bold text-slate-700">

@@ -89,18 +89,27 @@ export const ReportDriverModal: React.FC<ReportDriverModalProps> = ({
               </p>
             </div>
 
-            {/* Official Support Email Notice */}
-            <div className="p-3 bg-slate-900 text-white rounded-2xl flex items-center justify-between text-xs">
+            {/* Official Support Helpline & Email Notice */}
+            <div className="p-3.5 bg-slate-900 text-white rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-2">
               <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-brand-400 shrink-0" />
-                <span>Official Support Email:</span>
+                <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>24/7 Helpline:</span>
+                <a
+                  href="tel:+918500274288"
+                  className="font-mono text-emerald-300 font-bold hover:underline"
+                >
+                  +91 85002 74288
+                </a>
               </div>
-              <a
-                href="mailto:localdrivers.in@gmail.com"
-                className="font-mono text-brand-300 font-bold hover:underline"
-              >
-                localdrivers.in@gmail.com
-              </a>
+              <div className="flex items-center gap-2 sm:border-l sm:border-slate-700 sm:pl-3">
+                <Mail className="w-4 h-4 text-brand-400 shrink-0" />
+                <a
+                  href="mailto:localdrivers.in@gmail.com"
+                  className="font-mono text-brand-300 font-bold hover:underline"
+                >
+                  localdrivers.in@gmail.com
+                </a>
+              </div>
             </div>
 
             {/* Category Selectors */}

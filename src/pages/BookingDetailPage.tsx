@@ -380,6 +380,26 @@ export const BookingDetailPage: React.FC = () => {
         )}
       </div>
 
+      {/* 24/7 Customer Care Helpline */}
+      <div className="mt-6 p-5 bg-emerald-50/90 border border-emerald-200/80 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+            <Phone className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-xs font-black text-slate-900">Need Immediate Help with this Booking?</h4>
+            <p className="text-[11px] text-slate-600">Our customer care and dispatch team is available 24/7.</p>
+          </div>
+        </div>
+        <a
+          href="tel:+918500274288"
+          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-2 shadow-sm transition-colors shrink-0"
+        >
+          <Phone className="w-4 h-4" />
+          <span>Call Helpline: 85002 74288</span>
+        </a>
+      </div>
+
       {/* Report Driver Modal */}
       <ReportDriverModal
         isOpen={showReportModal}

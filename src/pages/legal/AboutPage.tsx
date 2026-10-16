@@ -73,6 +73,7 @@ export const AboutPage: React.FC = () => {
             </p>
             <div className="p-4 bg-slate-900 text-white rounded-2xl text-xs space-y-1 font-mono">
               <p>Portal: https://localdrivers.in</p>
+              <p>Helpline: +91 85002 74288 (Customers & Driver Partners)</p>
               <p>Email: localdrivers.in@gmail.com</p>
               <p>Address: Road No. 36, Jubilee Hills, Hyderabad, Telangana 500033</p>
             </div>

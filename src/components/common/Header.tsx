@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bell, Menu, X, Shield, User, MapPin, ChevronDown, HelpCircle, Briefcase, Car } from 'lucide-react';
+import { Bell, Menu, X, Shield, User, MapPin, ChevronDown, HelpCircle, Briefcase, Car, Phone } from 'lucide-react';
 import { UserLocation } from '../../types';
 import { ReportDriverModal } from './ReportDriverModal';
 
@@ -76,6 +76,15 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
                 <HelpCircle className="w-4 h-4 text-slate-400" />
                 <span>Help</span>
               </button>
+
+              <a
+                href="tel:+918500274288"
+                className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors border border-emerald-200"
+                title="Call 24/7 Helpline (+91 85002 74288)"
+              >
+                <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                <span>85002 74288</span>
+              </a>
 
               <div className="h-4 w-px bg-slate-200 mx-1" />
 
@@ -196,6 +205,14 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
           </div>
 
           <div className="pt-2 border-t border-slate-100 space-y-2">
+            <a
+              href="tel:+918500274288"
+              className="w-full p-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800 text-center flex items-center justify-center gap-2"
+            >
+              <Phone className="w-3.5 h-3.5 text-emerald-600" />
+              <span>24/7 Helpline: +91 85002 74288</span>
+            </a>
+
             <Link
               to="/driver/register"
               onClick={() => setMobileMenuOpen(false)}

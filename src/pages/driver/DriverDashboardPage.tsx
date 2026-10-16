@@ -274,6 +274,33 @@ export const DriverDashboardPage: React.FC = () => {
 
       </div>
 
+      {/* DRIVER PARTNER 24/7 HELPLINE & DISPATCH ASSISTANCE BANNER */}
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-3xl p-5 sm:p-6 mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-slate-700 shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+            <Phone className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-black text-white">Driver Partner Emergency & Dispatch Support</h3>
+              <span className="text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                24/7 Active
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Facing customer pickup delays, payment disputes, or app queries? Call our dedicated driver hotline.
+            </p>
+          </div>
+        </div>
+        <a
+          href="tel:+918500274288"
+          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-600/30 transition-all shrink-0"
+        >
+          <Phone className="w-4 h-4" />
+          <span>Driver Helpline: 85002 74288</span>
+        </a>
+      </div>
+
       {/* ACTIVE & CONFIRMED BOOKINGS (AFTER ACCEPTANCE) */}
       {activeBookings.length > 0 && (
         <div className="space-y-4 mb-8">
