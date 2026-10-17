@@ -1,4 +1,5 @@
 import { dbService } from './database';
+import { authService } from './auth';
 import { Driver, FilterState, UserLocation } from '../types';
 
 export function calculateHaversineDistance(
@@ -23,22 +24,162 @@ export function calculateHaversineDistance(
 }
 
 export const driversService = {
+  // --- LIVE API CALLS FOR PRODUCTION DATABASE ---
+
+  // Get genuine pending drivers from production database for Admin Approvals
+  async getPendingDriversAsync(): Promise<Driver[]> {
+    try {
+      const res = await fetch('/api/admin/pending-drivers', {
+        method: 'GET',
+        headers: authService.getAdminAuthHeaders(),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const data = await res.json();
+      if (data && Array.isArray(data.drivers)) {
+        return data.drivers;
+      }
+      return [];
+    } catch (err: any) {
+      console.warn('[Drivers Service] Could not fetch pending drivers from API, checking local storage:', err.message);
+      // Fallback to local storage (only genuine pending, no mock dummy drivers)
+      return dbService.getPendingDrivers();
+    }
+  },
+
+  // Get all drivers from production database for Admin Console
+  async getAllDriversAsync(): Promise<Driver[]> {
+    try {
+      const res = await fetch('/api/admin/all-drivers', {
+        method: 'GET',
+        headers: authService.getAdminAuthHeaders(),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}: ${res.statusText}`);
+      }
+
+      const data = await res.json();
+      if (data && Array.isArray(data.drivers)) {
+        return data.drivers;
+      }
+      return [];
+    } catch (err: any) {
+      console.warn('[Drivers Service] Could not fetch all drivers from API:', err.message);
+      return dbService.getDrivers();
+    }
+  },
+
   // Get all approved drivers for customer discovery
+  async getApprovedDriversAsync(): Promise<Driver[]> {
+    try {
+      const res = await fetch('/api/drivers?status=Approved', {
+        method: 'GET',
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.drivers)) {
+          return data.drivers;
+        }
+      }
+    } catch (err: any) {
+      console.warn('[Drivers Service] API discovery query failed, falling back to local database:', err.message);
+    }
+    return dbService.getApprovedDrivers();
+  },
+
+  // Register driver with real database persistence
+  async registerDriverAsync(input: Parameters<typeof dbService.registerDriver>[0]): Promise<{ success: boolean; driverId?: string; error?: string }> {
+    try {
+      const res = await fetch('/api/drivers/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to submit driver registration');
+      }
+
+      // Also sync to local database for immediate local reflection
+      dbService.registerDriver(input);
+
+      return { success: true, driverId: data.driverId };
+    } catch (err: any) {
+      console.error('[Drivers Service] Registration API error:', err);
+      // If network fails, allow local register with clear error response if needed
+      return { success: false, error: err.message };
+    }
+  },
+
+  // Approve driver in production database
+  async approveDriverAsync(id: string): Promise<boolean> {
+    try {
+      const res = await fetch('/api/admin/approve', {
+        method: 'POST',
+        headers: authService.getAdminAuthHeaders(),
+        body: JSON.stringify({ driverId: id }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to approve driver');
+      }
+
+      // Sync local database state
+      dbService.approveDriver(id);
+      return true;
+    } catch (err: any) {
+      console.error('[Drivers Service] Approve API error:', err);
+      // Fallback local update
+      dbService.approveDriver(id);
+      return false;
+    }
+  },
+
+  // Reject driver in production database
+  async rejectDriverAsync(id: string, reason?: string): Promise<boolean> {
+    try {
+      const res = await fetch('/api/admin/reject', {
+        method: 'POST',
+        headers: authService.getAdminAuthHeaders(),
+        body: JSON.stringify({ driverId: id, reason }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to reject driver');
+      }
+
+      // Sync local database state
+      dbService.rejectDriver(id, reason);
+      return true;
+    } catch (err: any) {
+      console.error('[Drivers Service] Reject API error:', err);
+      dbService.rejectDriver(id, reason);
+      return false;
+    }
+  },
+
+  // --- SYNCHRONOUS BACKWARDS-COMPATIBLE HELPERS ---
+
   getApprovedDrivers(): Driver[] {
     return dbService.getApprovedDrivers();
   },
 
-  // Get all drivers (for Admin view)
   getAllDrivers(): Driver[] {
     return dbService.getDrivers();
   },
 
-  // Get pending drivers (for Admin approvals)
   getPendingDrivers(): Driver[] {
     return dbService.getPendingDrivers();
   },
 
-  // Get driver details by ID
   getDriverById(id: string): Driver | undefined {
     return dbService.getDriverById(id);
   },
@@ -68,7 +209,6 @@ export const driversService = {
     });
 
     const filtered = processed.filter(driver => {
-      // Search query (name, area, city, vehicle)
       if (filters.searchQuery.trim()) {
         const query = filters.searchQuery.toLowerCase();
         const matchesName = driver.name.toLowerCase().includes(query);
@@ -78,27 +218,22 @@ export const driversService = {
         if (!matchesName && !matchesArea && !matchesCity && !matchesCode) return false;
       }
 
-      // Service Category filter
       if (filters.service && filters.service !== 'All') {
         if (!driver.services.includes(filters.service as any)) return false;
       }
 
-      // Distance filter (supports up to 30 km radius)
       if (filters.maxDistance && driver.distanceKm > filters.maxDistance) {
         return false;
       }
 
-      // Experience filter
       if (filters.minExperience && driver.experienceYears < filters.minExperience) {
         return false;
       }
 
-      // Rating filter
       if (filters.minRating && driver.rating < filters.minRating) {
         return false;
       }
 
-      // Online / Availability filter
       if (filters.availableOnly && !driver.isOnline) {
         return false;
       }
@@ -106,16 +241,17 @@ export const driversService = {
       return true;
     });
 
-    // Sort by distance ascending (nearest drivers first)
     return filtered.sort((a, b) => a.distanceKm - b.distanceKm);
   },
 
-  // Admin actions
+  // Admin actions (synchronous fallback)
   approveDriver(id: string): Driver | undefined {
+    this.approveDriverAsync(id).catch(console.error);
     return dbService.updateDriverStatus(id, 'Approved');
   },
 
-  rejectDriver(id: string): Driver | undefined {
+  rejectDriver(id: string, reason?: string): Driver | undefined {
+    this.rejectDriverAsync(id, reason).catch(console.error);
     return dbService.updateDriverStatus(id, 'Rejected');
   },
 
@@ -137,7 +273,7 @@ export const driversService = {
   },
 
   registerDriver(input: Parameters<typeof dbService.registerDriver>[0]): Driver {
+    this.registerDriverAsync(input).catch(console.error);
     return dbService.registerDriver(input);
   }
 };
-

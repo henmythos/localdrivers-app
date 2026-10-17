@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { MapPin, Search, Star, ShieldCheck, RotateCcw, SlidersHorizontal, Navigation } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { MapPin, Search, Star, ShieldCheck, RotateCcw, SlidersHorizontal, Navigation, Car, Phone } from 'lucide-react';
 import { Driver, FilterState, UserLocation } from '../types';
 import { driversService } from '../services/drivers';
 import { INITIAL_SERVICES } from '../services/database';
@@ -33,8 +33,11 @@ export const FindDriversPage: React.FC<FindDriversPageProps> = ({ userLocation, 
   });
 
   useEffect(() => {
-    const list = driversService.getApprovedDrivers();
-    setAllDrivers(list);
+    driversService.getApprovedDriversAsync().then(list => {
+      setAllDrivers(list);
+    }).catch(() => {
+      setAllDrivers(driversService.getApprovedDrivers());
+    });
   }, []);
 
   useEffect(() => {
@@ -284,6 +287,34 @@ export const FindDriversPage: React.FC<FindDriversPageProps> = ({ userLocation, 
               onBook={(d) => setSelectedDriverForBooking(d)}
             />
           ))
+        ) : allDrivers.length === 0 ? (
+          <div className="col-span-full py-16 px-4 text-center bg-white rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="w-14 h-14 bg-brand-50 text-brand-600 rounded-2xl flex items-center justify-center mx-auto">
+              <ShieldCheck className="w-7 h-7" />
+            </div>
+            <div className="max-w-md mx-auto">
+              <h3 className="font-black text-slate-900 text-lg">New Verified Drivers Onboarding</h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Driver partners across Hyderabad are currently completing Aadhaar verification, driving licence checks, and background screening before appearing online.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              <Link
+                to="/driver/register"
+                className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-2"
+              >
+                <Car className="w-4 h-4 text-amber-400" />
+                <span>Register as Driver Partner</span>
+              </Link>
+              <a
+                href="tel:+918500274288"
+                className="w-full sm:w-auto px-5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2"
+              >
+                <Phone className="w-4 h-4 text-emerald-600" />
+                <span>Urgent Booking Helpline</span>
+              </a>
+            </div>
+          </div>
         ) : (
           <div className="col-span-full py-16 text-center bg-white rounded-2xl border border-slate-200 shadow-sm">
             <MapPin className="w-12 h-12 text-slate-300 mx-auto mb-3" />

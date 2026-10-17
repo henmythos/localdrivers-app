@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MapPin, Navigation, X, Check, Search, Compass, Loader2 } from 'lucide-react';
 import { UserLocation } from '../../types';
 import { HYDERABAD_POPULAR_AREAS, locationService } from '../../services/location';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 interface LocationModalProps {
   isOpen: boolean;
@@ -16,6 +18,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
   currentLocation,
   onSelectLocation,
 }) => {
+  useBodyScrollLock(isOpen, onClose);
   const [customInput, setCustomInput] = useState('');
   const [isGpsLoading, setIsGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -97,12 +100,20 @@ export const LocationModal: React.FC<LocationModalProps> = ({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/70 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
+  return createPortal(
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-navy-950/70 backdrop-blur-sm overflow-y-auto modal-overlay-container overscroll-contain animate-fade-in"
+    >
+      <div
+        className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 flex flex-col my-auto max-h-[92vh] overscroll-contain"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
               <MapPin className="w-5 h-5 fill-emerald-200" />
@@ -237,6 +248,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

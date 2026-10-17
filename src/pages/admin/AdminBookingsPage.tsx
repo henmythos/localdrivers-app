@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Phone, Search, Filter, ShieldCheck, MapPin, Navigation, 
@@ -11,6 +12,7 @@ import { bookingsService } from '../../services/bookings';
 import { dbService } from '../../services/database';
 import { authService } from '../../services/auth';
 import { RouteMap } from '../../components/map/RouteMap';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 export const AdminBookingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -25,6 +27,14 @@ export const AdminBookingsPage: React.FC = () => {
   // Modals state
   const [inspectingBooking, setInspectingBooking] = useState<Booking | null>(null);
   const [correctingBooking, setCorrectingBooking] = useState<Booking | null>(null);
+
+  useBodyScrollLock(
+    !!inspectingBooking || !!correctingBooking,
+    () => {
+      if (correctingBooking) setCorrectingBooking(null);
+      else if (inspectingBooking) setInspectingBooking(null);
+    }
+  );
 
   // Manual correction form state
   const [correctionFare, setCorrectionFare] = useState<number>(0);
@@ -729,9 +739,17 @@ export const AdminBookingsPage: React.FC = () => {
       </div>
 
       {/* 1. INSPECT TRIP & AUDIT MODAL */}
-      {inspectingBooking && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
+      {inspectingBooking && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setInspectingBooking(null);
+          }}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-start md:items-center justify-center p-3 sm:p-4 overflow-y-auto modal-overlay-container overscroll-contain animate-in fade-in"
+        >
+          <div
+            className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] overflow-y-auto overscroll-contain shadow-2xl border border-slate-200 relative my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             {/* Modal Header */}
             <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
@@ -1081,16 +1099,25 @@ export const AdminBookingsPage: React.FC = () => {
             </div>
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* 2. ADMIN MANUAL CORRECTION MODAL */}
-      {correctingBooking && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden">
+      {correctingBooking && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setCorrectingBooking(null);
+          }}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-start md:items-center justify-center p-3 sm:p-4 overflow-y-auto modal-overlay-container overscroll-contain animate-in fade-in"
+        >
+          <div
+            className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden relative my-auto overscroll-contain max-h-[92vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             {/* Header */}
-            <div className="bg-amber-500 text-white px-6 py-4 flex items-center justify-between">
+            <div className="bg-amber-500 text-white px-6 py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <Edit className="w-5 h-5 text-white" />
                 <div>
@@ -1217,7 +1244,8 @@ export const AdminBookingsPage: React.FC = () => {
             </form>
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

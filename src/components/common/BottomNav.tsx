@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate, Link } from 'react-router-dom';
 import { Home, Calendar, Search, User, CheckSquare, X, Car, Shield, Phone, HelpCircle, ChevronRight } from 'lucide-react';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 export const BottomNav: React.FC = () => {
   const location = useLocation();
@@ -8,13 +9,25 @@ export const BottomNav: React.FC = () => {
   const path = location.pathname;
 
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
+  useBodyScrollLock(accountSheetOpen, () => setAccountSheetOpen(false));
+
+  // Do not render bottom navigation on authentication, registration, or onboarding pages
+  // to avoid overlapping forms, keyboards, document uploads, and submit buttons.
+  const isAuthOrOnboarding = 
+    path === '/driver/login' || 
+    path === '/driver/register' || 
+    path === '/admin/login';
+
+  if (isAuthOrOnboarding) {
+    return null;
+  }
 
   const isDriver = path.startsWith('/driver');
   const isAdmin = path.startsWith('/admin');
 
   if (isAdmin) {
     return (
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-navy-900 text-white border-t border-slate-800 shadow-2xl px-2 py-1">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-navy-900 text-white border-t border-slate-800 shadow-2xl px-2 py-1 pb-safe">
         <div className="flex justify-around items-center h-14">
           <NavLink
             to="/admin/dashboard"
@@ -67,7 +80,7 @@ export const BottomNav: React.FC = () => {
 
   if (isDriver) {
     return (
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 shadow-xl px-2 py-1">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 shadow-xl px-2 py-1 pb-safe">
         <div className="flex justify-around items-center h-14">
           <NavLink
             to="/driver/dashboard"
@@ -113,7 +126,7 @@ export const BottomNav: React.FC = () => {
   return (
     <>
       {/* Consumer Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg px-3 py-1">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg px-3 py-1 pb-safe">
         <div className="flex justify-around items-center h-14">
           
           {/* Home */}
@@ -170,9 +183,12 @@ export const BottomNav: React.FC = () => {
 
       {/* Modern Customer Account Sheet (Slide-Up) */}
       {accountSheetOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end animate-in fade-in duration-150">
+        <div
+          onClick={() => setAccountSheetOpen(false)}
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end animate-in fade-in duration-150 modal-overlay-container overscroll-contain"
+        >
           <div
-            className="bg-white rounded-t-3xl p-6 shadow-2xl border-t border-slate-200 max-h-[85vh] overflow-y-auto space-y-5 animate-in slide-in-from-bottom duration-200"
+            className="bg-white rounded-t-3xl p-6 shadow-2xl border-t border-slate-200 max-h-[85vh] overflow-y-auto overscroll-contain space-y-5 animate-in slide-in-from-bottom duration-200 pb-safe"
             onClick={e => e.stopPropagation()}
           >
             {/* Sheet Header */}

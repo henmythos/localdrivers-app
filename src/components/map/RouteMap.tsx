@@ -67,6 +67,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
         center: defaultCenter,
         zoom: 12,
         zoomControl: true,
+        scrollWheelZoom: false,
       });
 
       // OpenStreetMap Tile Layer

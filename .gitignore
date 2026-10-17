@@ -32,3 +32,9 @@ android/local.properties
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Local SQLite databases & fallback storage
+*.db
+*.db-journal
+.storage/
+

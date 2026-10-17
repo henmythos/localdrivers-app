@@ -1,4 +1,4 @@
-33export type ServiceType =
+export type ServiceType =
   | 'City Driver'
   | 'Outstation Driver'
   | 'Monthly Driver'

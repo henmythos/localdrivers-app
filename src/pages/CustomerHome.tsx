@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   MapPin, ChevronDown, ChevronRight, Clock, Calendar, User, Car, 
-  ShieldCheck, Star, Navigation, AlertTriangle, Headphones, Shield, Sparkles 
+  ShieldCheck, Star, Navigation, AlertTriangle, Headphones, Shield, Sparkles, Phone 
 } from 'lucide-react';
 import { Driver, UserLocation, ServiceCategory } from '../types';
 import { driversService } from '../services/drivers';
@@ -341,14 +341,46 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {displayedDrivers.slice(0, 4).map(driver => (
-              <DriverCard
-                key={driver.id}
-                driver={driver}
-                onSelect={(d) => navigate(`/drivers/${d.id}`)}
-                onBook={(d) => setSelectedDriverForBooking(d)}
-              />
-            ))}
+            {displayedDrivers.length > 0 ? (
+              displayedDrivers.slice(0, 4).map(driver => (
+                <DriverCard
+                  key={driver.id}
+                  driver={driver}
+                  onSelect={(d) => navigate(`/drivers/${d.id}`)}
+                  onBook={(d) => setSelectedDriverForBooking(d)}
+                />
+              ))
+            ) : (
+              <div className="col-span-full bg-white rounded-3xl p-6 sm:p-8 text-center border border-slate-200 shadow-sm space-y-4">
+                <div className="w-14 h-14 bg-brand-50 text-brand-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                  <ShieldCheck className="w-7 h-7" />
+                </div>
+                <div className="max-w-md mx-auto">
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                    Verified Driver Partners Launching Across Hyderabad
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                    We are currently onboarding and background-verifying licensed drivers for Jubilee Hills, Banjara Hills, Gachibowli, Madhapur, and Cyberabad.
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                  <Link
+                    to="/driver/register"
+                    className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-2"
+                  >
+                    <Car className="w-4 h-4 text-amber-400" />
+                    <span>Drive With Us (Partner Register)</span>
+                  </Link>
+                  <a
+                    href="tel:+918500274288"
+                    className="w-full sm:w-auto px-5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2"
+                  >
+                    <Phone className="w-4 h-4 text-emerald-600" />
+                    <span>24/7 Helpline: +91 85002 74288</span>
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 

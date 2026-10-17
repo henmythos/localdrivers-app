@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Car, Lock, Phone, ArrowRight, ShieldCheck, UserPlus } from 'lucide-react';
+import { Car, Lock, Phone, ArrowRight, ShieldCheck, UserPlus, Loader2 } from 'lucide-react';
 import { authService } from '../../services/auth';
 
 export const DriverLoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -18,11 +19,18 @@ export const DriverLoginPage: React.FC = () => {
       return;
     }
 
-    const res = authService.loginDriver(identifier, password || identifier);
-    if (res.success) {
-      navigate('/driver/dashboard');
-    } else {
-      setError(res.error || 'Login failed');
+    setIsLoading(true);
+    try {
+      const res = await authService.loginDriver(identifier, password || identifier);
+      if (res.success) {
+        navigate('/driver/dashboard');
+      } else {
+        setError(res.error || 'Login failed');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Login connection failed.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -95,10 +103,20 @@ export const DriverLoginPage: React.FC = () => {
 
           <button
             type="submit"
-            className="w-full py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
+            disabled={isLoading}
+            className="w-full py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
           >
-            Sign In to Driver Dashboard
-            <ArrowRight className="w-4 h-4" />
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Verifying Credentials...
+              </>
+            ) : (
+              <>
+                Sign In to Driver Dashboard
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </form>
 

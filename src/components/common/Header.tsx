@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Bell, Menu, X, Shield, User, MapPin, ChevronDown, HelpCircle, Briefcase, Car, Phone } from 'lucide-react';
 import { UserLocation } from '../../types';
 import { ReportDriverModal } from './ReportDriverModal';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 interface HeaderProps {
   userLocation: UserLocation;
@@ -14,6 +15,8 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
   const path = location.pathname;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
+
+  useBodyScrollLock(mobileMenuOpen, () => setMobileMenuOpen(false));
 
   const isDriver = path.startsWith('/driver');
   const isAdmin = path.startsWith('/admin');
@@ -150,15 +153,21 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
         </div>
       </div>
 
-      {/* Mobile Drawer Menu */}
+      {/* Mobile Drawer Menu & Overlay Backdrop */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-slate-200 px-4 pt-3 pb-6 space-y-3 shadow-xl animate-in slide-in-from-top-2 duration-150">
-          {/* Location button inside drawer */}
-          <button
-            onClick={() => {
-              setMobileMenuOpen(false);
-              onRequestLocation();
-            }}
+        <>
+          <div
+            onClick={() => setMobileMenuOpen(false)}
+            className="fixed inset-0 top-16 bg-black/40 backdrop-blur-xs z-30 md:hidden animate-in fade-in duration-150"
+            aria-hidden="true"
+          />
+          <div className="md:hidden relative z-40 bg-white border-b border-slate-200 px-4 pt-3 pb-6 space-y-3 shadow-xl animate-in slide-in-from-top-2 duration-150 max-h-[calc(100vh-4rem)] overflow-y-auto overscroll-contain">
+            {/* Location button inside drawer */}
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onRequestLocation();
+              }}
             className="w-full flex items-center justify-between p-3.5 bg-slate-50 hover:bg-slate-100 rounded-2xl border border-slate-200 text-xs font-bold text-slate-800 transition-colors"
           >
             <div className="flex items-center gap-2.5 min-w-0">
@@ -240,7 +249,8 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
             </div>
           </div>
         </div>
-      )}
+      </>
+    )}
 
       {/* Global Report / Support Modal */}
       <ReportDriverModal

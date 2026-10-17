@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ShieldAlert, X, Mail, Phone, CheckCircle2, Send, AlertTriangle, UserCheck, Hash } from 'lucide-react';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 interface ReportDriverModalProps {
   isOpen: boolean;
@@ -21,6 +23,7 @@ export const ReportDriverModal: React.FC<ReportDriverModalProps> = ({
   driverCode: propDriverCode,
   bookingId,
 }) => {
+  useBodyScrollLock(isOpen, onClose);
   const [driverCode, setDriverCode] = useState(propDriverCode || initialDriverCode);
   const [driverName, setDriverName] = useState(propDriverName || initialDriverName);
   const [category, setCategory] = useState<'Report Driver' | 'General Query' | 'Payment Issue' | 'Safety Concern'>('Report Driver');
@@ -71,9 +74,19 @@ export const ReportDriverModal: React.FC<ReportDriverModalProps> = ({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 border border-slate-200 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto modal-overlay-container overscroll-contain animate-fade-in"
+    >
+      <div
+        className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 border border-slate-200 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto overscroll-contain"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Close Button */}
         <button
@@ -280,7 +293,8 @@ export const ReportDriverModal: React.FC<ReportDriverModalProps> = ({
         )}
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

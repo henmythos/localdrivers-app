@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { 
   X, CheckCircle2, Calendar, Clock, MapPin, Navigation, 
@@ -12,6 +13,7 @@ import { RouteMap } from '../map/RouteMap';
 import { routingService, RouteResult, HYDERABAD_LANDMARKS } from '../../services/routing';
 import { gpsService } from '../../services/gps';
 import { billingService } from '../../services/billing';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 interface BookingModalProps {
   driver: Driver;
@@ -27,6 +29,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   onBookingComplete,
 }) => {
   const navigate = useNavigate();
+  useBodyScrollLock(true, onClose);
   const [step, setStep] = useState<number>(1);
 
   // Form State
@@ -295,12 +298,20 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     onBookingComplete(booking);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl border border-slate-200 relative my-8">
+  return createPortal(
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto modal-overlay-container overscroll-contain animate-in fade-in duration-200"
+    >
+      <div
+        className="bg-white rounded-2xl sm:rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl border border-slate-200 relative my-auto max-h-[94vh] flex flex-col overscroll-contain"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-slate-900 to-brand-950 text-white p-5 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-slate-900 to-brand-950 text-white p-4 sm:p-5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <img
               src={driver.photo}
@@ -333,7 +344,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
         {/* Progress Bar */}
         {step < 7 && (
-          <div className="bg-slate-100 h-1.5 w-full">
+          <div className="bg-slate-100 h-1.5 w-full shrink-0">
             <div
               className="bg-brand-600 h-full transition-all duration-300"
               style={{ width: `${(step / 6) * 100}%` }}
@@ -342,7 +353,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         )}
 
         {/* Modal Body */}
-        <div className="p-6">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 overscroll-contain">
           
           {/* STEP 1: Service Type */}
           {step === 1 && (
@@ -1396,6 +1407,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

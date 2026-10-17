@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   Power, ShieldCheck, Star, Calendar, Clock, MapPin, Navigation, 
@@ -12,6 +13,7 @@ import { bookingsService } from '../../services/bookings';
 import { dbService } from '../../services/database';
 import { gpsService } from '../../services/gps';
 import { billingService } from '../../services/billing';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 export const DriverDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -28,6 +30,14 @@ export const DriverDashboardPage: React.FC = () => {
   const [endTripBooking, setEndTripBooking] = useState<Booking | null>(null);
   const [odometerEndInput, setOdometerEndInput] = useState('');
   const [isEndingTrip, setIsEndingTrip] = useState(false);
+
+  useBodyScrollLock(
+    !!startTripBooking || !!endTripBooking,
+    () => {
+      if (endTripBooking) setEndTripBooking(null);
+      else if (startTripBooking) setStartTripBooking(null);
+    }
+  );
 
   const loadData = () => {
     const state = authService.getAuthState();
@@ -631,9 +641,17 @@ export const DriverDashboardPage: React.FC = () => {
       </div>
 
       {/* START TRIP MODAL */}
-      {startTripBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      {startTripBooking && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setStartTripBooking(null);
+          }}
+          className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto modal-overlay-container overscroll-contain animate-in fade-in"
+        >
+          <div
+            className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 relative my-auto overscroll-contain max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto">
               <Play className="w-6 h-6 fill-brand-600" />
             </div>
@@ -684,13 +702,22 @@ export const DriverDashboardPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* END TRIP MODAL */}
-      {endTripBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      {endTripBooking && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEndTripBooking(null);
+          }}
+          className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto modal-overlay-container overscroll-contain animate-in fade-in"
+        >
+          <div
+            className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 relative my-auto overscroll-contain max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
               <Square className="w-6 h-6 fill-emerald-600" />
             </div>
@@ -733,7 +760,8 @@ export const DriverDashboardPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

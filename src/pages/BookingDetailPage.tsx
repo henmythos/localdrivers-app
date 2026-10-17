@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Calendar, Clock, MapPin, Navigation, Phone, 
@@ -14,6 +15,7 @@ import { billingService, formatDuration } from '../services/billing';
 import { gpsService } from '../services/gps';
 import { RouteMap } from '../components/map/RouteMap';
 import { ReportDriverModal } from '../components/common/ReportDriverModal';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 export const BookingDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +36,11 @@ export const BookingDetailPage: React.FC = () => {
   // Dispute Modal State
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputeReason, setDisputeReason] = useState('');
+
+  useBodyScrollLock(showEndTripModal || showDisputeModal, () => {
+    setShowEndTripModal(false);
+    setShowDisputeModal(false);
+  });
 
   const [nowTimestamp, setNowTimestamp] = useState(Date.now());
 
@@ -610,14 +617,19 @@ export const BookingDetailPage: React.FC = () => {
       )}
 
       {/* END TRIP CONFIRMATION MODAL */}
-      {showEndTripModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto">
+      {showEndTripModal && createPortal(
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowEndTripModal(false);
+          }}
+          className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in overflow-y-auto overscroll-contain"
+        >
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-auto max-h-[92vh] flex flex-col overflow-y-auto overscroll-contain animate-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto shrink-0">
               <Square className="w-6 h-6 fill-red-600" />
             </div>
 
-            <div className="text-center">
+            <div className="text-center shrink-0">
               <h3 className="text-lg font-black text-slate-900">End Driver Service?</h3>
               <p className="text-xs text-slate-500 mt-1">
                 This will finalize the trip timer and calculate the final bill.
@@ -651,7 +663,7 @@ export const BookingDetailPage: React.FC = () => {
               </span>
             </div>
 
-            <div className="flex gap-2 pt-2">
+            <div className="flex gap-2 pt-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowEndTripModal(false)}
@@ -669,16 +681,22 @@ export const BookingDetailPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* DISPUTE MODAL */}
-      {showDisputeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      {showDisputeModal && createPortal(
+        <div 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowDisputeModal(false);
+          }}
+          className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in overflow-y-auto overscroll-contain"
+        >
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-auto max-h-[92vh] flex flex-col overflow-y-auto overscroll-contain animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
               <h3 className="font-black text-slate-900 text-base">Raise Billing Dispute</h3>
-              <button onClick={() => setShowDisputeModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowDisputeModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -698,7 +716,7 @@ export const BookingDetailPage: React.FC = () => {
                 />
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 pt-1 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowDisputeModal(false)}
@@ -715,7 +733,8 @@ export const BookingDetailPage: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* REPORT DRIVER MODAL */}

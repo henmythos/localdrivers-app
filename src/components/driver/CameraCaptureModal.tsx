@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Camera, X, Zap, ZapOff, RefreshCw, Check, RotateCcw, ShieldCheck, AlertCircle } from 'lucide-react';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 interface CameraCaptureModalProps {
   isOpen: boolean;
@@ -16,6 +18,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   onClose,
   onCapture,
 }) => {
+  useBodyScrollLock(isOpen, onClose);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -138,14 +141,14 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black text-white flex flex-col justify-between overflow-hidden animate-fade-in select-none">
+  return createPortal(
+    <div className="fixed inset-0 z-[60] bg-black text-white flex flex-col justify-between overflow-hidden animate-fade-in select-none">
       
       {/* Hidden canvas for taking snapshot */}
       <canvas ref={canvasRef} className="hidden" />
 
       {/* TOP ACTION BAR */}
-      <div className="absolute top-0 left-0 right-0 z-20 p-4 bg-gradient-to-b from-black/90 via-black/50 to-transparent flex items-center justify-between">
+      <div className="absolute top-0 left-0 right-0 z-20 p-4 pt-safe bg-gradient-to-b from-black/90 via-black/50 to-transparent flex items-center justify-between">
         
         {/* Flip Camera Button */}
         <button
@@ -265,7 +268,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
       </div>
 
       {/* BOTTOM CONTROL BAR */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 p-6 bg-gradient-to-t from-black/95 via-black/80 to-transparent flex items-center justify-center">
+      <div className="absolute bottom-0 left-0 right-0 z-20 p-6 pb-safe bg-gradient-to-t from-black/95 via-black/80 to-transparent flex items-center justify-center">
         
         {!capturedImage ? (
           /* CAPTURE BUTTON */
@@ -305,6 +308,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
       </div>
 
-    </div>
+    </div>,
+    document.body
   );
 };

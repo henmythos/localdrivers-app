@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Search, Filter, ShieldCheck, Star, 
@@ -8,6 +9,7 @@ import {
 import { Driver, DriverStatus } from '../../types';
 import { driversService } from '../../services/drivers';
 import { dbService } from '../../services/database';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 export const AdminDriversPage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,9 +23,25 @@ export const AdminDriversPage: React.FC = () => {
   const [paymentAmount, setPaymentAmount] = useState<number>(50);
   const [paymentUrl, setPaymentUrl] = useState<string>('');
   const [putOnHold, setPutOnHold] = useState<boolean>(true);
+  const [selectedDriverForDocs, setSelectedDriverForDocs] = useState<Driver | null>(null);
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
 
-  const loadDrivers = () => {
-    setDrivers(driversService.getAllDrivers());
+  useBodyScrollLock(
+    !!selectedDriverForPayment || !!selectedDriverForDocs || !!lightboxImageUrl,
+    () => {
+      if (lightboxImageUrl) setLightboxImageUrl(null);
+      else if (selectedDriverForDocs) setSelectedDriverForDocs(null);
+      else if (selectedDriverForPayment) setSelectedDriverForPayment(null);
+    }
+  );
+
+  const loadDrivers = async () => {
+    try {
+      const liveDrivers = await driversService.getAllDriversAsync();
+      setDrivers(liveDrivers);
+    } catch {
+      setDrivers(driversService.getAllDrivers());
+    }
   };
 
   useEffect(() => {
@@ -72,10 +90,6 @@ export const AdminDriversPage: React.FC = () => {
     loadDrivers();
     setTimeout(() => setActionMsg(null), 4000);
   };
-
-  // Document Review Modal State
-  const [selectedDriverForDocs, setSelectedDriverForDocs] = useState<Driver | null>(null);
-  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
 
   const handleUpdateDocStatus = (driverId: string, docId: string, newStatus: 'Verified' | 'Rejected' | 'Under Review') => {
     const driver = drivers.find(d => d.id === driverId);
@@ -350,9 +364,17 @@ export const AdminDriversPage: React.FC = () => {
       </div>
 
       {/* ADMIN PAYMENT LINK GENERATOR MODAL */}
-      {selectedDriverForPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-200 p-6 relative">
+      {selectedDriverForPayment && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedDriverForPayment(null);
+          }}
+          className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto modal-overlay-container overscroll-contain animate-in fade-in duration-200"
+        >
+          <div
+            className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-200 p-6 relative my-auto overscroll-contain"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
               <div className="flex items-center gap-3">
@@ -459,13 +481,22 @@ export const AdminDriversPage: React.FC = () => {
             </form>
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ADMIN DOCUMENT INSPECTOR MODAL */}
-      {selectedDriverForDocs && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 p-6 sm:p-8 relative">
+      {selectedDriverForDocs && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedDriverForDocs(null);
+          }}
+          className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-md overflow-y-auto modal-overlay-container overscroll-contain animate-in fade-in duration-200"
+        >
+          <div
+            className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] overflow-y-auto overscroll-contain shadow-2xl border border-slate-200 p-6 sm:p-8 relative my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             <div className="flex items-start justify-between border-b border-slate-100 pb-4 mb-6">
               <div className="flex items-center gap-4">
@@ -606,20 +637,33 @@ export const AdminDriversPage: React.FC = () => {
             </div>
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* FULL-SIZE IMAGE LIGHTBOX MODAL */}
-      {lightboxImageUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+      {lightboxImageUrl && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setLightboxImageUrl(null);
+          }}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200 modal-overlay-container overscroll-contain"
+        >
           <button
             onClick={() => setLightboxImageUrl(null)}
-            className="absolute top-4 right-4 text-white hover:text-slate-300 p-2 font-bold"
+            className="absolute top-4 right-4 text-white hover:text-slate-300 p-2 font-bold z-10"
+            aria-label="Close Preview"
           >
             <X className="w-8 h-8" />
           </button>
-          <img src={lightboxImageUrl} alt="Full resolution document preview" className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl" />
-        </div>
+          <img
+            src={lightboxImageUrl}
+            alt="Full resolution document preview"
+            className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>,
+        document.body
       )}
 
     </div>

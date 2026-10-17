@@ -44,3 +44,30 @@
 .animate-ping-slow {
   animation: ping-slow 2.5s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
+
+/* Modal and overlay scroll containment (per modern web guidance) */
+dialog:modal,
+.modal-overlay-container {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+body.modal-open {
+  overflow: hidden !important;
+  touch-action: none;
+}
+
+.overscroll-contain {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile safe area spacing */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 1rem);
+}
+

@@ -16,13 +16,18 @@ export const AdminDashboardPage: React.FC = () => {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
 
-  const loadData = () => {
+  const loadData = async () => {
     const state = authService.getAuthState();
     if (!state.isAdminAuthenticated) {
       navigate('/admin/login');
       return;
     }
-    setDrivers(driversService.getAllDrivers());
+    try {
+      const liveDrivers = await driversService.getAllDriversAsync();
+      setDrivers(liveDrivers);
+    } catch {
+      setDrivers(driversService.getAllDrivers());
+    }
     setBookings(bookingsService.getAllBookings());
   };
 
@@ -43,10 +48,10 @@ export const AdminDashboardPage: React.FC = () => {
   // Total Platform Fees Collected
   const totalCommissionCollected = bookings.reduce((sum, b) => {
     if (b.status === 'Completed') {
-      return sum + (b.commissionFee || 50);
+      return sum + (b.commissionFee || 0);
     }
     return sum;
-  }, 12450);
+  }, 0);
 
   const handleLogout = () => {
     authService.logoutAdmin();
@@ -210,25 +215,31 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
 
           <div className="space-y-3">
-            {approvedDrivers.slice(0, 5).map(driver => (
-              <div key={driver.id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <img src={driver.photo} alt={driver.name} className="w-10 h-10 rounded-xl object-cover" />
-                  <div>
-                    <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{driver.name}</h4>
-                    <span className="text-[11px] text-slate-500">{driver.area} • {driver.experienceYears} yrs exp</span>
+            {approvedDrivers.length > 0 ? (
+              approvedDrivers.slice(0, 5).map(driver => (
+                <div key={driver.id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <img src={driver.photo} alt={driver.name} className="w-10 h-10 rounded-xl object-cover" />
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{driver.name}</h4>
+                      <span className="text-[11px] text-slate-500">{driver.area} • {driver.experienceYears} yrs exp</span>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-amber-500 flex items-center justify-end gap-1">
+                      <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                      {driver.rating}
+                    </span>
+                    <span className="text-[10px] text-emerald-600 font-bold">{driver.totalTrips} trips</span>
                   </div>
                 </div>
-
-                <div className="text-right">
-                  <span className="text-xs font-bold text-amber-500 flex items-center justify-end gap-1">
-                    <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                    {driver.rating}
-                  </span>
-                  <span className="text-[10px] text-emerald-600 font-bold">{driver.totalTrips} trips</span>
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-xs text-slate-400 py-8 text-center font-medium">
+                No approved drivers in active roster yet. New applications appear under Pending KYC.
+              </p>
+            )}
           </div>
         </div>
 
@@ -242,24 +253,30 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
 
           <div className="space-y-3">
-            {bookings.slice(0, 5).map(b => (
-              <div key={b.id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-xs text-brand-700">{b.id}</span>
-                    <span className="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded">
-                      {b.serviceTitle}
-                    </span>
+            {bookings.length > 0 ? (
+              bookings.slice(0, 5).map(b => (
+                <div key={b.id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-xs text-brand-700">{b.id}</span>
+                      <span className="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded">
+                        {b.serviceTitle}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-1">Customer: {b.customerName} → Driver: {b.driverName}</p>
                   </div>
-                  <p className="text-xs text-slate-600 mt-1">Customer: {b.customerName} → Driver: {b.driverName}</p>
-                </div>
 
-                <div className="text-right">
-                  <span className="font-black text-slate-900 text-xs block">₹{b.estimatedFare}</span>
-                  <span className="text-[10px] font-bold text-slate-500">{b.status}</span>
+                  <div className="text-right">
+                    <span className="font-black text-slate-900 text-xs block">₹{b.estimatedFare}</span>
+                    <span className="text-[10px] font-bold text-slate-500">{b.status}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-xs text-slate-400 py-8 text-center font-medium">
+                No platform bookings yet. Live dispatch requests will appear here in real-time.
+              </p>
+            )}
           </div>
         </div>
 

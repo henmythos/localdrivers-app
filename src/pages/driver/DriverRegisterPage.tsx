@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Phone, MapPin, Briefcase, Globe, Car, ShieldCheck, CheckCircle2, ArrowRight, Camera, FileText, Lock, UploadCloud, Eye } from 'lucide-react';
+import { User, Phone, MapPin, Briefcase, Globe, Car, ShieldCheck, CheckCircle2, ArrowRight, Camera, FileText, Lock, UploadCloud, Eye, Loader2 } from 'lucide-react';
 import { driversService } from '../../services/drivers';
 import { CameraCaptureModal } from '../../components/driver/CameraCaptureModal';
 
@@ -72,7 +72,9 @@ export const DriverRegisterPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -120,29 +122,42 @@ export const DriverRegisterPage: React.FC = () => {
       { id: `doc-lic-b-${Date.now()}`, type: 'Driving Licence (Back)' as const, status: 'Under Review' as const, url: licenseBackUrl, uploadedAt: new Date().toISOString() },
     ];
 
-    driversService.registerDriver({
-      name: formData.name.trim(),
-      phone: formData.phone.trim(),
-      email: formData.email.trim() || `${formData.phone.trim()}@localdrivers.in`,
-      photo: photoSelfieUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400',
-      rating: 5.0,
-      totalTrips: 0,
-      startingPrice: 299,
-      distanceKm: 2.5,
-      latitude: 17.4126,
-      longitude: 78.4071,
-      area: formData.area.trim() || 'Hyderabad',
-      city: 'Hyderabad',
-      experienceYears: Number(formData.experienceYears) || 1,
-      languages: selectedLanguages,
-      services: selectedServices as any,
-      vehicleCategories: selectedVehicles as any,
-      description: formData.description.trim() || 'Professional driver registered on Localdrivers platform.',
-      documents,
-    });
+    setIsSubmitting(true);
+    try {
+      const res = await driversService.registerDriverAsync({
+        name: formData.name.trim(),
+        phone: formData.phone.trim(),
+        email: formData.email.trim() || `${formData.phone.trim()}@localdrivers.in`,
+        photo: photoSelfieUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400',
+        rating: 5.0,
+        totalTrips: 0,
+        startingPrice: 299,
+        distanceKm: 2.5,
+        latitude: 17.4126,
+        longitude: 78.4071,
+        area: formData.area.trim() || 'Hyderabad',
+        city: 'Hyderabad',
+        experienceYears: Number(formData.experienceYears) || 1,
+        languages: selectedLanguages,
+        services: selectedServices as any,
+        vehicleCategories: selectedVehicles as any,
+        description: formData.description.trim() || 'Professional driver registered on Localdrivers platform.',
+        documents,
+      });
 
-    setSubmittedPhone(formData.phone.trim());
-    setIsSubmitted(true);
+      if (!res.success) {
+        setError(res.error || 'Failed to submit registration. Please check your details.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      setSubmittedPhone(formData.phone.trim());
+      setIsSubmitted(true);
+    } catch (err: any) {
+      setError(err.message || 'Error connecting to registration service. Please retry.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (isSubmitted) {
@@ -721,10 +736,20 @@ export const DriverRegisterPage: React.FC = () => {
 
           <button
             type="submit"
-            className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-brand-500/20 transition-colors flex items-center justify-center gap-2"
+            disabled={isSubmitting}
+            className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-brand-500/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
           >
-            Submit Application for Admin Approval
-            <ArrowRight className="w-4 h-4" />
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Saving Application to Database...
+              </>
+            ) : (
+              <>
+                Submit Application for Admin Approval
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </form>
 
