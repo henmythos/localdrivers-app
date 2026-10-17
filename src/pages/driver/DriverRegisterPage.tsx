@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { User, Phone, MapPin, Briefcase, Globe, Car, ShieldCheck, CheckCircle2, ArrowRight, Camera, FileText, Lock, UploadCloud, Eye, Loader2 } from 'lucide-react';
 import { driversService } from '../../services/drivers';
 import { CameraCaptureModal } from '../../components/driver/CameraCaptureModal';
+import { compressFileToDataUrl, compressDataUrl } from '../../utils/imageCompressor';
 
 const AVAILABLE_SERVICES = [
   'City Driver',
@@ -51,14 +52,19 @@ export const DriverRegisterPage: React.FC = () => {
   const [error, setError] = useState('');
   const [submittedPhone, setSubmittedPhone] = useState('');
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, setUrl: (val: string) => void) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, setUrl: (val: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressFileToDataUrl(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.78 });
+        setUrl(compressed);
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setUrl(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -76,6 +82,7 @@ export const DriverRegisterPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError('');
 
     if (!formData.name.trim()) {
@@ -146,7 +153,10 @@ export const DriverRegisterPage: React.FC = () => {
       });
 
       if (!res.success) {
-        setError(res.error || 'Failed to submit registration. Please check your details.');
+        setError(
+          res.error ||
+          "We couldn't submit your driver application right now. Your information has not been confirmed as submitted. Please try again shortly."
+        );
         setIsSubmitting(false);
         return;
       }
@@ -154,7 +164,10 @@ export const DriverRegisterPage: React.FC = () => {
       setSubmittedPhone(formData.phone.trim());
       setIsSubmitted(true);
     } catch (err: any) {
-      setError(err.message || 'Error connecting to registration service. Please retry.');
+      console.error('[Registration Submission Error]', err);
+      setError(
+        "We couldn't submit your driver application right now. Your information has not been confirmed as submitted. Please try again shortly."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -771,8 +784,9 @@ export const DriverRegisterPage: React.FC = () => {
           docTitle={activeCameraModal.docTitle}
           docType={activeCameraModal.docType}
           onClose={() => setActiveCameraModal(null)}
-          onCapture={(imageDataUrl) => {
-            activeCameraModal.targetSetter(imageDataUrl);
+          onCapture={async (imageDataUrl) => {
+            const compressed = await compressDataUrl(imageDataUrl, { maxWidth: 1200, maxHeight: 1200, quality: 0.78 });
+            activeCameraModal.targetSetter(compressed);
             setActiveCameraModal(null);
           }}
         />

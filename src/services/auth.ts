@@ -1,5 +1,6 @@
 import { dbService } from './database';
 import { Driver } from '../types';
+import { apiClient } from './apiClient';
 
 export interface AuthState {
   isDriverAuthenticated: boolean;
@@ -49,34 +50,34 @@ export const authService = {
       return { success: false, error: 'Mobile Number is required' };
     }
 
-    try {
-      const response = await fetch('/api/drivers/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: cleanId, password }),
-      });
+    const res = await apiClient.post<{ success: boolean; driver?: Driver; token?: string; error?: string; status?: string }>(
+      '/api/drivers/login',
+      { identifier: cleanId, password },
+      { fallbackErrorMessage: 'Driver login service temporarily unavailable. Please retry.' }
+    );
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        return {
-          success: false,
-          error: data.error || 'Login verification failed.',
-          status: data.status,
-        };
+    if (res.success && res.data?.driver) {
+      localStorage.setItem(DRIVER_AUTH_KEY, res.data.driver.id);
+      if (res.data.token) {
+        localStorage.setItem('localdrivers_driver_token', res.data.token);
       }
+      dbService.updateDriver(res.data.driver.id, res.data.driver);
+      return { success: true, driver: res.data.driver };
+    }
 
-      if (data.driver) {
-        localStorage.setItem(DRIVER_AUTH_KEY, data.driver.id);
-        if (data.token) {
-          localStorage.setItem('localdrivers_driver_token', data.token);
-        }
-        // Sync with local memory for offline/client navigation
-        dbService.updateDriver(data.driver.id, data.driver);
-        return { success: true, driver: data.driver };
-      }
-    } catch (err: any) {
-      console.warn('[Auth Service] Live login API unavailable, checking local database:', err.message);
+    if (res.status === 403 || res.data?.status === 'Pending' || res.data?.status === 'Rejected') {
+      return {
+        success: false,
+        error: res.data?.error || res.error,
+        status: res.data?.status,
+      };
+    }
+
+    if (res.status === 401 || res.status === 404 || res.status === 400) {
+      return {
+        success: false,
+        error: res.data?.error || res.error,
+      };
     }
 
     // Fallback to local database check if offline

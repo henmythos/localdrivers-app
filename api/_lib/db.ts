@@ -1,5 +1,6 @@
-import { createClient, Client } from '@libsql/client';
-import fs from 'fs';
+import { createClient as createWebClient } from '@libsql/client/web';
+import { createClient as createNodeClient } from '@libsql/client';
+import type { Client } from '@libsql/client';
 import path from 'path';
 
 let dbClient: Client | null = null;
@@ -25,7 +26,8 @@ export function getTursoToken(): string {
 
 /**
  * Returns a libSQL client instance.
- * Attempts cloud Turso database first. If unavailable, falls back to a persistent local SQLite file.
+ * Prefers pure-web client for remote Turso HTTP/libSQL endpoints (no native bindings required).
+ * Falls back to local SQLite file for local development.
  */
 export function getDb(): Client {
   if (dbClient) return dbClient;
@@ -33,26 +35,26 @@ export function getDb(): Client {
   const rawUrl = getTursoUrl();
   const rawToken = getTursoToken();
 
-  // If remote URL is provided and valid, try to connect
+  // If remote Turso URL is provided and valid, use pure-web client (zero native bindings)
   if (rawUrl && (rawUrl.startsWith('libsql://') || rawUrl.startsWith('https://'))) {
     try {
-      dbClient = createClient({
+      dbClient = createWebClient({
         url: rawUrl,
         authToken: rawToken || undefined,
-      });
+      }) as unknown as Client;
       return dbClient;
     } catch (err: any) {
-      console.warn(`[DB] Failed to initialize remote Turso client: ${err.message}. Falling back to local database.`);
+      console.warn(`[DB] Failed to create remote Turso client: ${err.message}.`);
     }
   }
 
-  // Local / serverless SQLite file fallback
+  // Local SQLite file fallback
   const isVercel = !!process.env.VERCEL;
   const dbDir = isVercel ? '/tmp' : process.cwd();
   const dbPath = path.join(dbDir, 'localdrivers.db');
   const fileUrl = `file:${dbPath}`;
 
-  dbClient = createClient({
+  dbClient = createNodeClient({
     url: fileUrl,
   });
 
@@ -61,7 +63,7 @@ export function getDb(): Client {
 
 /**
  * Ensures all required tables and indexes exist.
- * Automatically run before querying or modifying driver registrations.
+ * Guaranteed to never enter infinite recursive loops on connection errors.
  */
 export async function initDb(): Promise<Client> {
   let db = getDb();
@@ -141,19 +143,67 @@ export async function initDb(): Promise<Client> {
     isInitialized = true;
     return db;
   } catch (err: any) {
-    // If the remote Turso client failed due to auth/network, attempt local SQLite fallback
+    console.error('[DB Init Error]:', err.message || err);
+
+    // If remote Turso failed and we haven't tried local fallback yet
     const rawUrl = getTursoUrl();
-    if (rawUrl && (rawUrl.startsWith('libsql://') || rawUrl.startsWith('https://'))) {
-      console.warn(`[DB] Error initializing remote Turso database (${err.message}). Re-initializing on local SQLite.`);
-      const isVercel = !!process.env.VERCEL;
-      const dbDir = isVercel ? '/tmp' : process.cwd();
-      const dbPath = path.join(dbDir, 'localdrivers.db');
-      dbClient = createClient({ url: `file:${dbPath}` });
+    if (rawUrl && (rawUrl.startsWith('libsql://') || rawUrl.startsWith('https://')) && !process.env.VERCEL) {
+      console.warn(`[DB] Switching to local SQLite development database.`);
+      const dbPath = path.join(process.cwd(), 'localdrivers.db');
+      dbClient = createNodeClient({ url: `file:${dbPath}` });
       isInitialized = false;
-      return initDb();
+
+      // One-time local retry
+      await dbClient.execute(`
+        CREATE TABLE IF NOT EXISTS drivers (
+          id TEXT PRIMARY KEY,
+          driver_code TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          phone TEXT UNIQUE NOT NULL,
+          email TEXT,
+          password_hash TEXT,
+          salt TEXT,
+          photo TEXT,
+          rating REAL DEFAULT 5.0,
+          total_trips INTEGER DEFAULT 0,
+          experience_years INTEGER DEFAULT 1,
+          languages TEXT,
+          services TEXT,
+          vehicle_categories TEXT,
+          status TEXT NOT NULL DEFAULT 'Pending',
+          is_online INTEGER DEFAULT 0,
+          is_hold INTEGER DEFAULT 0,
+          pending_commission_fee REAL DEFAULT 0,
+          starting_price REAL DEFAULT 299,
+          distance_km REAL DEFAULT 2.5,
+          latitude REAL DEFAULT 17.4126,
+          longitude REAL DEFAULT 78.4071,
+          area TEXT DEFAULT 'Hyderabad',
+          city TEXT DEFAULT 'Hyderabad',
+          verification_badge INTEGER DEFAULT 0,
+          description TEXT,
+          joined_date TEXT,
+          rejection_reason TEXT,
+          reviewed_by TEXT,
+          reviewed_at TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      await dbClient.execute(`
+        CREATE TABLE IF NOT EXISTS driver_documents (
+          id TEXT PRIMARY KEY,
+          driver_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'Under Review',
+          url TEXT NOT NULL,
+          uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      isInitialized = true;
+      return dbClient;
     }
-    console.error('[DB] Database initialization error:', err);
+
     throw err;
   }
 }
-

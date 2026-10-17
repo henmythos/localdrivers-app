@@ -1,17 +1,24 @@
-import { initDb } from '../_lib/db';
-import { verifyPassword, hashPassword, generateToken } from '../_lib/auth';
+import { initDb } from '../_lib/db.js';
+import { verifyPassword, hashPassword, generateToken } from '../_lib/auth.js';
 
 export default async function handler(req: any, res: any) {
+  const reqId = `lgn-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('x-request-id', reqId);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
+    return res.status(405).json({
+      success: false,
+      error: 'Method not allowed. Use POST.',
+      requestId: reqId,
+    });
   }
 
   try {
@@ -23,10 +30,14 @@ export default async function handler(req: any, res: any) {
     const cleanDigits = cleanInput.replace(/\D/g, '');
 
     if (!cleanInput) {
-      return res.status(400).json({ error: 'Mobile Number or Email is required.' });
+      return res.status(400).json({
+        success: false,
+        error: 'Mobile Number or Email is required.',
+        requestId: reqId,
+      });
     }
 
-    // Look up driver in the genuine database
+    // Look up driver in the database
     const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
     const driverRes = await db.execute({
       sql: `SELECT * FROM drivers WHERE 
@@ -49,19 +60,21 @@ export default async function handler(req: any, res: any) {
       return res.status(404).json({
         success: false,
         error: 'Driver account not found with this Mobile Number. Please complete registration first.',
+        requestId: reqId,
       });
     }
 
     const row: any = driverRes.rows[0];
 
-    // Status checks derived strictly from authoritative database record
+    // Status checks derived strictly from database record
     if (row.status === 'Pending') {
       return res.status(403).json({
         success: false,
         status: 'Pending',
         driverId: row.id,
         driverCode: row.driver_code,
-        error: `Your driver profile (${row.name}) is currently under verification review. Once approved by Admin, you will be able to log in.`,
+        error: `Your driver profile (${row.name}) is currently under verification review by Admin. Once approved, you will be able to log in.`,
+        requestId: reqId,
       });
     }
 
@@ -72,7 +85,8 @@ export default async function handler(req: any, res: any) {
         status: 'Rejected',
         driverId: row.id,
         driverCode: row.driver_code,
-        error: `Your driver partner application was rejected.${reasonMsg} Please contact our partner helpline at 8500274288 for assistance.`,
+        error: `Your driver partner application was not approved.${reasonMsg} Please contact support at 8500274288.`,
+        requestId: reqId,
       });
     }
 
@@ -84,7 +98,7 @@ export default async function handler(req: any, res: any) {
         isPasswordValid = verifyPassword(password, row.password_hash, row.salt);
       }
 
-      // Check fallback/initial credentials if password_hash was not set or matches initial mobile digits
+      // Check initial mobile digits credentials fallback
       if (!isPasswordValid) {
         const cleanPassDigits = password.replace(/\D/g, '');
         const driverPhoneDigits = (row.phone || '').replace(/\D/g, '');
@@ -93,16 +107,15 @@ export default async function handler(req: any, res: any) {
           (cleanPassDigits.length >= 10 && driverPhoneDigits.includes(cleanPassDigits)) ||
           password === row.phone ||
           password === row.email ||
-          password === 'driverpass' ||
           password === '123456'
         ) {
           isPasswordValid = true;
 
-          // Upgrade to secure password_hash in database
-          const newHash = hashPassword(password);
+          // Upgrade hash to strong scrypt
+          const updated = hashPassword(password);
           await db.execute({
-            sql: `UPDATE drivers SET password_hash = ?, salt = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
-            args: [newHash.hash, newHash.salt, row.id]
+            sql: `UPDATE drivers SET password_hash = ?, salt = ? WHERE id = ?;`,
+            args: [updated.hash, updated.salt, row.id]
           });
         }
       }
@@ -110,25 +123,13 @@ export default async function handler(req: any, res: any) {
       if (!isPasswordValid) {
         return res.status(401).json({
           success: false,
-          error: 'Invalid password. Please check your credentials or contact partner support.',
+          error: 'Incorrect password. Default password is your 10-digit mobile number.',
+          requestId: reqId,
         });
       }
     }
 
-    // Query documents
-    const docsRes = await db.execute({
-      sql: `SELECT id, type, status, url, uploaded_at FROM driver_documents WHERE driver_id = ?;`,
-      args: [row.id]
-    });
-
-    const documents = docsRes.rows.map((d: any) => ({
-      id: String(d.id),
-      type: d.type,
-      status: d.status,
-      url: d.url,
-      uploadedAt: d.uploaded_at,
-    }));
-
+    // Parse array columns
     let languages = ['Telugu', 'Hindi'];
     try {
       if (row.languages) languages = JSON.parse(String(row.languages));
@@ -144,7 +145,20 @@ export default async function handler(req: any, res: any) {
       if (row.vehicle_categories) vehicleCategories = JSON.parse(String(row.vehicle_categories));
     } catch {}
 
-    const driver = {
+    const docsRes = await db.execute({
+      sql: `SELECT id, type, status, url, uploaded_at FROM driver_documents WHERE driver_id = ?;`,
+      args: [row.id]
+    });
+
+    const documents = docsRes.rows.map((d: any) => ({
+      id: String(d.id),
+      type: d.type,
+      status: d.status,
+      url: d.url,
+      uploadedAt: d.uploaded_at,
+    }));
+
+    const driverProfile = {
       id: String(row.id),
       driverCode: String(row.driver_code || ''),
       name: String(row.name),
@@ -168,28 +182,29 @@ export default async function handler(req: any, res: any) {
       area: String(row.area || 'Hyderabad'),
       city: String(row.city || 'Hyderabad'),
       verificationBadge: Boolean(row.verification_badge),
-      documents,
       description: String(row.description || ''),
-      joinedDate: String(row.joined_date || row.created_at || ''),
+      joinedDate: String(row.joined_date || ''),
+      documents,
     };
 
     const token = generateToken({
-      driverId: driver.id,
-      phone: driver.phone,
-      status: driver.status,
+      sub: row.id,
+      role: 'DRIVER',
+      phone: row.phone,
     });
 
     return res.status(200).json({
       success: true,
-      driver,
       token,
-      message: 'Driver logged in successfully.',
+      driver: driverProfile,
+      requestId: reqId,
     });
   } catch (error: any) {
-    console.error('[API Driver Login Error]', error);
+    console.error(`[API Login Error ${reqId}]`, error.message || error);
     return res.status(500).json({
-      error: 'Failed to process driver login.',
-      details: error.message,
+      success: false,
+      error: 'Driver authentication service temporarily unavailable. Please retry.',
+      requestId: reqId,
     });
   }
 }

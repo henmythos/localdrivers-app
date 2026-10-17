@@ -71,6 +71,10 @@ function apiDevPlugin(): Plugin {
             const { default: handler } = await server.ssrLoadModule('./api/upload.ts');
             return await handler(req, customRes);
           }
+          if (url === '/api/health') {
+            const { default: handler } = await server.ssrLoadModule('./api/health.ts');
+            return await handler(req, customRes);
+          }
           next();
         } catch (err: any) {
           console.error('[API Dev Middleware Error]', err);

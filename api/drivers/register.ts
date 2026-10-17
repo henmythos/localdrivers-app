@@ -1,6 +1,6 @@
-import { initDb } from '../_lib/db';
-import { uploadFileBuffer, parseDataUrl } from '../_lib/storage';
-import { hashPassword } from '../_lib/auth';
+import { initDb } from '../_lib/db.js';
+import { uploadFileBuffer, parseDataUrl } from '../_lib/storage.js';
+import { hashPassword } from '../_lib/auth.js';
 
 function generateDriverCode(): string {
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -15,17 +15,23 @@ function generateDriverCode(): string {
 }
 
 export default async function handler(req: any, res: any) {
-  // Set CORS headers
+  const reqId = `reg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-auth');
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('x-request-id', reqId);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
+    return res.status(405).json({
+      success: false,
+      error: 'Method not allowed. Use POST.',
+      requestId: reqId,
+    });
   }
 
   try {
@@ -50,17 +56,28 @@ export default async function handler(req: any, res: any) {
 
     // 1. Validation
     if (!name || typeof name !== 'string' || !name.trim()) {
-      return res.status(400).json({ error: 'Full Name is required.' });
+      return res.status(400).json({
+        success: false,
+        error: 'Full Name is required for driver partner registration.',
+        requestId: reqId,
+      });
     }
 
     const cleanPhoneDigits = (phone || '').toString().replace(/\D/g, '');
     if (!cleanPhoneDigits || cleanPhoneDigits.length < 10) {
-      return res.status(400).json({ error: 'A valid 10-digit mobile number is required.' });
+      return res.status(400).json({
+        success: false,
+        error: 'A valid 10-digit mobile number is required.',
+        requestId: reqId,
+      });
     }
 
     const standardPhone = cleanPhoneDigits.length === 10
       ? `+91 ${cleanPhoneDigits.slice(0, 5)} ${cleanPhoneDigits.slice(5)}`
       : `+${cleanPhoneDigits}`;
+
+    const maskedPhone = `******${cleanPhoneDigits.slice(-4)}`;
+    console.log(`[API Register ${reqId}] Processing application for: ${name.trim().slice(0, 15)} (Phone: ${maskedPhone})`);
 
     // 2. Check for existing driver with same phone number
     const last10 = cleanPhoneDigits.slice(-10);
@@ -76,15 +93,17 @@ export default async function handler(req: any, res: any) {
     let isUpdate = false;
 
     if (existingCheck.rows.length > 0) {
-      const existing = existingCheck.rows[0];
+      const existing: any = existingCheck.rows[0];
       if (existing.status === 'Approved') {
-        return res.status(400).json({
-          error: `A driver account for ${existing.name} with this mobile number is already Approved. Please proceed to Driver Login.`
+        return res.status(409).json({
+          success: false,
+          error: `An active account for ${existing.name} with this mobile number already exists and is Approved. Please proceed to Driver Login.`,
+          requestId: reqId,
         });
       }
-      // Allow resuming or updating pending/rejected application
+      // Allow updating / re-submitting pending or rejected application idempotently
       driverId = String(existing.id);
-      driverCode = String(existing.driver_code);
+      driverCode = String(existing.driver_code || generateDriverCode());
       isUpdate = true;
     }
 
@@ -155,7 +174,7 @@ export default async function handler(req: any, res: any) {
     const nowIso = new Date().toISOString();
     const today = nowIso.split('T')[0];
 
-    // 5. Database transaction (or batch)
+    // 5. Database write
     if (isUpdate) {
       await db.execute({
         sql: `UPDATE drivers SET
@@ -241,18 +260,22 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    console.log(`[API Register ${reqId}] SUCCESS: Driver ${driverCode} saved to database.`);
+
     return res.status(200).json({
       success: true,
       driverId,
       driverCode,
       status: 'Pending',
       message: 'Driver registration submitted successfully. Your profile is now under verification review by Admin.',
+      requestId: reqId,
     });
   } catch (error: any) {
-    console.error('[API Register Error]', error);
+    console.error(`[API Register Error ${reqId}]:`, error.message || error);
     return res.status(500).json({
-      error: 'Failed to save driver registration. Please try again or contact support at 8500274288.',
-      details: error.message,
+      success: false,
+      error: "We couldn't submit your driver application right now. Your information has not been confirmed as submitted. Please try again shortly.",
+      requestId: reqId,
     });
   }
 }

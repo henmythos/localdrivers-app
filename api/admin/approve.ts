@@ -1,21 +1,32 @@
-import { initDb } from '../_lib/db';
-import { verifyAdminAuth } from '../_lib/auth';
+import { initDb } from '../_lib/db.js';
+import { verifyAdminAuth } from '../_lib/auth.js';
 
 export default async function handler(req: any, res: any) {
+  const reqId = `app-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-auth');
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('x-request-id', reqId);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
+    return res.status(405).json({
+      success: false,
+      error: 'Method not allowed. Use POST.',
+      requestId: reqId,
+    });
   }
 
   if (!verifyAdminAuth(req)) {
-    return res.status(401).json({ error: 'Unauthorized: Administrator access required.' });
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Administrator access required.',
+      requestId: reqId,
+    });
   }
 
   try {
@@ -24,7 +35,11 @@ export default async function handler(req: any, res: any) {
     const { driverId } = body;
 
     if (!driverId) {
-      return res.status(400).json({ error: 'Driver ID is required for approval.' });
+      return res.status(400).json({
+        success: false,
+        error: 'Driver ID is required for approval.',
+        requestId: reqId,
+      });
     }
 
     // Verify driver exists
@@ -34,7 +49,11 @@ export default async function handler(req: any, res: any) {
     });
 
     if (driverCheck.rows.length === 0) {
-      return res.status(404).json({ error: `Driver with ID ${driverId} not found.` });
+      return res.status(404).json({
+        success: false,
+        error: `Driver with ID ${driverId} not found.`,
+        requestId: reqId,
+      });
     }
 
     const driverName = driverCheck.rows[0].name;
@@ -64,13 +83,15 @@ export default async function handler(req: any, res: any) {
 
     return res.status(200).json({
       success: true,
-      message: `Driver ${driverName} has been approved. They are now visible for customer discovery and eligible to log in.`,
+      message: `Driver ${driverName} has been approved. They are now active for customer discovery and eligible to log in.`,
+      requestId: reqId,
     });
   } catch (error: any) {
-    console.error('[API Approve Driver Error]', error);
+    console.error(`[API Approve Driver Error ${reqId}]`, error.message || error);
     return res.status(500).json({
+      success: false,
       error: 'Failed to approve driver in database.',
-      details: error.message,
+      requestId: reqId,
     });
   }
 }

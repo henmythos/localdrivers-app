@@ -1,22 +1,33 @@
-import { initDb } from '../_lib/db';
-import { verifyAdminAuth } from '../_lib/auth';
+import { initDb } from '../_lib/db.js';
+import { verifyAdminAuth } from '../_lib/auth.js';
 
 export default async function handler(req: any, res: any) {
+  const reqId = `pnd-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-auth');
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('x-request-id', reqId);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed. Use GET.' });
+    return res.status(405).json({
+      success: false,
+      error: 'Method not allowed. Use GET.',
+      requestId: reqId,
+    });
   }
 
   // Authorization check
   if (!verifyAdminAuth(req)) {
-    return res.status(401).json({ error: 'Unauthorized: Administrator access required.' });
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Administrator access required.',
+      requestId: reqId,
+    });
   }
 
   try {
@@ -35,24 +46,33 @@ export default async function handler(req: any, res: any) {
       ORDER BY created_at DESC;
     `);
 
-    const drivers = [];
+    // Fetch all documents for pending drivers in one query (prevents N+1 query problem)
+    const docsRes = await db.execute(`
+      SELECT id, driver_id, type, status, url, uploaded_at 
+      FROM driver_documents;
+    `);
 
-    for (const row of driversRes.rows) {
-      // Query documents for each pending driver
-      const docsRes = await db.execute({
-        sql: `SELECT id, type, status, url, uploaded_at FROM driver_documents WHERE driver_id = ?;`,
-        args: [row.id]
-      });
-
-      const documents = docsRes.rows.map((d: any) => ({
+    const docsByDriverId = new Map<string, any[]>();
+    for (const d of docsRes.rows) {
+      const driverId = String(d.driver_id);
+      if (!docsByDriverId.has(driverId)) {
+        docsByDriverId.set(driverId, []);
+      }
+      docsByDriverId.get(driverId)!.push({
         id: String(d.id),
         type: d.type,
         status: d.status,
         url: d.url,
         uploadedAt: d.uploaded_at,
-      }));
+      });
+    }
 
-      // Parse JSON arrays safely
+    const drivers = [];
+
+    for (const row of driversRes.rows) {
+      const driverId = String(row.id);
+      const documents = docsByDriverId.get(driverId) || [];
+
       let languages = ['Telugu', 'Hindi'];
       try {
         if (row.languages) languages = JSON.parse(String(row.languages));
@@ -69,7 +89,7 @@ export default async function handler(req: any, res: any) {
       } catch {}
 
       drivers.push({
-        id: String(row.id),
+        id: driverId,
         driverCode: String(row.driver_code || ''),
         name: String(row.name),
         phone: String(row.phone),
@@ -81,7 +101,7 @@ export default async function handler(req: any, res: any) {
         languages,
         services,
         vehicleCategories,
-        status: 'Pending',
+        status: String(row.status),
         isOnline: Boolean(row.is_online),
         isHold: Boolean(row.is_hold),
         pendingCommissionFee: Number(row.pending_commission_fee) || 0,
@@ -102,12 +122,14 @@ export default async function handler(req: any, res: any) {
       success: true,
       count: drivers.length,
       drivers,
+      requestId: reqId,
     });
   } catch (error: any) {
-    console.error('[API Pending Drivers Error]', error);
+    console.error(`[API Pending Drivers Error ${reqId}]`, error.message || error);
     return res.status(500).json({
+      success: false,
       error: 'Failed to retrieve pending drivers from database.',
-      details: error.message,
+      requestId: reqId,
     });
   }
 }

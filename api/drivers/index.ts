@@ -1,16 +1,23 @@
-import { initDb } from '../_lib/db';
+import { initDb } from '../_lib/db.js';
 
 export default async function handler(req: any, res: any) {
+  const reqId = `drv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('x-request-id', reqId);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed. Use GET.' });
+    return res.status(405).json({
+      success: false,
+      error: 'Method not allowed. Use GET.',
+      requestId: reqId,
+    });
   }
 
   try {
@@ -93,12 +100,14 @@ export default async function handler(req: any, res: any) {
       success: true,
       count: drivers.length,
       drivers,
+      requestId: reqId,
     });
   } catch (error: any) {
-    console.error('[API Get Drivers Error]', error);
+    console.error(`[API Get Drivers Error ${reqId}]`, error.message || error);
     return res.status(500).json({
-      error: 'Failed to retrieve drivers.',
-      details: error.message,
+      success: false,
+      error: 'Unable to retrieve driver list from database. Please try again.',
+      requestId: reqId,
     });
   }
 }
