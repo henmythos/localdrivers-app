@@ -179,7 +179,7 @@ export const bookingsService = {
   // Start Trip (Authoritative Server Timestamp & Location Capture)
   async startTripAsync(id: string, location?: GeoLocation, odometerStartKm?: number): Promise<{ success: boolean; booking?: Booking; error?: string }> {
     const res = await apiClient.post<{ success: boolean; bookingId: string; tripStartTime: string; status: string; error?: string }>(
-      '/api/bookings/trip',
+      '/api/bookings',
       {
         action: 'start',
         bookingId: id,
@@ -213,7 +213,7 @@ export const bookingsService = {
     odometerEndKm?: number
   ): Promise<{ success: boolean; booking?: Booking; error?: string }> {
     const res = await apiClient.post<{ success: boolean; bookingId: string; tripDurationMinutes: number; finalFare: number; error?: string }>(
-      '/api/bookings/trip',
+      '/api/bookings',
       {
         action: 'complete',
         bookingId: id,

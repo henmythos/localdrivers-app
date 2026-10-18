@@ -32,17 +32,17 @@ export default async function handler(req: any, res: any) {
   try {
     const db = await initDb();
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-    const { driverId } = body;
+    const { driverId, action, isHold } = body;
 
     if (!driverId) {
       return res.status(400).json({
         success: false,
-        error: 'Driver ID is required for approval.',
+        error: 'Driver ID is required.',
         requestId: reqId,
       });
     }
 
-    // Verify driver exists
+    // Check if driver exists
     const driverCheck = await db.execute({
       sql: `SELECT id, name, status FROM drivers WHERE id = ?;`,
       args: [driverId]
@@ -58,7 +58,24 @@ export default async function handler(req: any, res: any) {
 
     const driverName = driverCheck.rows[0].name;
 
-    // Update driver status in database
+    // 1. ACTION: HOLD / UNHOLD
+    if (action === 'hold') {
+      const holdVal = isHold ? 1 : 0;
+      await db.execute({
+        sql: `UPDATE drivers SET is_hold = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
+        args: [holdVal, driverId],
+      });
+
+      return res.status(200).json({
+        success: true,
+        driverId,
+        isHold: Boolean(holdVal),
+        message: holdVal ? `Driver ${driverName} placed on hold.` : `Driver ${driverName} removed from hold.`,
+        requestId: reqId,
+      });
+    }
+
+    // 2. DEFAULT ACTION: APPROVE DRIVER
     await db.execute({
       sql: `UPDATE drivers SET
         status = 'Approved',
@@ -87,10 +104,10 @@ export default async function handler(req: any, res: any) {
       requestId: reqId,
     });
   } catch (error: any) {
-    console.error(`[API Approve Driver Error ${reqId}]`, error.message || error);
+    console.error(`[API Approve/Hold Driver Error ${reqId}]`, error.message || error);
     return res.status(500).json({
       success: false,
-      error: 'Failed to approve driver in database.',
+      error: 'Failed to process driver action in database.',
       requestId: reqId,
     });
   }

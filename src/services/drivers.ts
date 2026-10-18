@@ -83,10 +83,7 @@ export const driversService = {
     const authState = authService.getAuthState();
     const isAdmin = authState.isAdminAuthenticated;
 
-    const endpoint = isAdmin
-      ? `/api/admin/driver-detail?id=${encodeURIComponent(id)}`
-      : `/api/drivers?id=${encodeURIComponent(id)}`;
-
+    const endpoint = `/api/drivers?id=${encodeURIComponent(id)}`;
     const headers = isAdmin ? authService.getAdminAuthHeaders() : undefined;
 
     const res = await apiClient.get<{ driver?: Driver; drivers?: Driver[] }>(endpoint, {
@@ -125,7 +122,7 @@ export const driversService = {
       isBookable: boolean;
       message?: string;
       error?: string;
-    }>('/api/drivers/availability', {
+    }>('/api/drivers', {
       driverId: id,
       isOnline,
       latitude: location?.latitude,
@@ -322,8 +319,8 @@ export const driversService = {
 
   async toggleHoldAsync(id: string, isHold: boolean): Promise<boolean> {
     const res = await apiClient.post<{ success: boolean }>(
-      '/api/admin/hold',
-      { driverId: id, isHold },
+      '/api/admin/approve',
+      { driverId: id, action: 'hold', isHold },
       {
         headers: authService.getAdminAuthHeaders(),
         fallbackErrorMessage: 'Failed to update hold status on server.',

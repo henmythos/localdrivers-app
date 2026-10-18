@@ -292,10 +292,10 @@ async function main() {
 
   // 12. Test Admin Driver Detail Lookup by Stable ID (Includes full KYC docs)
   try {
-    const handler = await loadHandler('api/admin/driver-detail.ts');
+    const handler = await loadHandler('api/drivers/index.ts');
     const req = {
       method: 'GET',
-      url: `/api/admin/driver-detail?id=${registeredDriverId}`,
+      url: `/api/drivers?id=${registeredDriverId}`,
       headers: { 'x-admin-auth': 'localdrivers_admin_session_token' }
     };
     const res = createMockRes();
@@ -313,7 +313,7 @@ async function main() {
 
   // 13. Test Driver-Controlled Online/Offline Toggle (Switching to Offline)
   try {
-    const handler = await loadHandler('api/drivers/availability.ts');
+    const handler = await loadHandler('api/drivers/index.ts');
     const req = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -352,7 +352,7 @@ async function main() {
 
   // 15. Test Driver Toggles Back Online
   try {
-    const handler = await loadHandler('api/drivers/availability.ts');
+    const handler = await loadHandler('api/drivers/index.ts');
     const req = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -373,7 +373,7 @@ async function main() {
 
   // 16. Test Rejected/Pending Candidate Cannot Go Online
   try {
-    const handler = await loadHandler('api/drivers/availability.ts');
+    const handler = await loadHandler('api/drivers/index.ts');
     const req = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -395,7 +395,7 @@ async function main() {
   // 17. Test Atomic Booking Assignment & Race-Safe Creation
   let bookingId = '';
   try {
-    const handler = await loadHandler('api/bookings/index.ts');
+    const handler = await loadHandler('api/bookings.ts');
     const req = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -428,7 +428,7 @@ async function main() {
 
   // 18. Test Double Booking Conflict Prevention (Concurrent booking attempt must be rejected)
   try {
-    const handler = await loadHandler('api/bookings/index.ts');
+    const handler = await loadHandler('api/bookings.ts');
     const req = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -457,9 +457,9 @@ async function main() {
     failed++;
   }
 
-  // 18. Test Start Trip Lifecycle
+  // 19. Test Start Trip Lifecycle
   try {
-    const handler = await loadHandler('api/bookings/trip.ts');
+    const handler = await loadHandler('api/bookings.ts');
     const req = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -473,17 +473,17 @@ async function main() {
     const res = createMockRes();
     await handler(req, res);
     if (res.statusCode === 200 && res.body?.status === 'In Progress' && res.body?.driverWorkStatus === 'on_trip') {
-      console.log(`[PASS] 18. Trip Lifecycle: Trip started with authoritative timestamp; driver marked 'on_trip'.`);
+      console.log(`[PASS] 19. Trip Lifecycle: Trip started with authoritative timestamp; driver marked 'on_trip'.`);
       passed++;
     } else {
       throw new Error(`Failed to start trip: ${JSON.stringify(res.body)}`);
     }
   } catch (err) {
-    console.error(`[FAIL] 18. Trip start lifecycle check failed:`, err.message || err);
+    console.error(`[FAIL] 19. Trip start lifecycle check failed:`, err.message || err);
     failed++;
   }
 
-  // 19. Test Customer Discovery Excludes On-Trip Driver
+  // 20. Test Customer Discovery Excludes On-Trip Driver
   try {
     const handler = await loadHandler('api/drivers/index.ts');
     const req = { method: 'GET', url: '/api/drivers?status=Approved', headers: {} };
@@ -491,19 +491,19 @@ async function main() {
     await handler(req, res);
     const inDiscovery = res.body?.drivers?.some(d => d.id === registeredDriverId);
     if (res.statusCode === 200 && !inDiscovery) {
-      console.log(`[PASS] 19. Customer Discovery: On-trip driver ${registeredDriverId} is properly excluded from immediate booking recommendations.`);
+      console.log(`[PASS] 20. Customer Discovery: On-trip driver ${registeredDriverId} is properly excluded from immediate booking recommendations.`);
       passed++;
     } else {
       throw new Error(`On-trip driver was still visible in immediate customer discovery!`);
     }
   } catch (err) {
-    console.error(`[FAIL] 19. On-trip discovery exclusion check failed:`, err.message || err);
+    console.error(`[FAIL] 20. On-trip discovery exclusion check failed:`, err.message || err);
     failed++;
   }
 
-  // 20. Test Complete Trip Lifecycle
+  // 21. Test Complete Trip Lifecycle
   try {
-    const handler = await loadHandler('api/bookings/trip.ts');
+    const handler = await loadHandler('api/bookings.ts');
     const req = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -517,23 +517,23 @@ async function main() {
     const res = createMockRes();
     await handler(req, res);
     if (res.statusCode === 200 && res.body?.status === 'Completed' && res.body?.driverWorkStatus === 'available') {
-      console.log(`[PASS] 20. Trip Lifecycle: Trip completed; active-job restriction released; driver returned to available.`);
+      console.log(`[PASS] 21. Trip Lifecycle: Trip completed; active-job restriction released; driver returned to available.`);
       passed++;
     } else {
       throw new Error(`Failed to complete trip: ${JSON.stringify(res.body)}`);
     }
   } catch (err) {
-    console.error(`[FAIL] 20. Trip completion lifecycle check failed:`, err.message || err);
+    console.error(`[FAIL] 21. Trip completion lifecycle check failed:`, err.message || err);
     failed++;
   }
 
-  // 21. Test Admin Hold Toggle & Discovery Filter
+  // 22. Test Admin Hold Toggle & Discovery Filter
   try {
-    const holdHandler = await loadHandler('api/admin/hold.ts');
+    const holdHandler = await loadHandler('api/admin/approve.ts');
     const holdReq = {
       method: 'POST',
       headers: { 'x-admin-auth': 'localdrivers_admin_session_token', 'content-type': 'application/json' },
-      body: { driverId: registeredDriverId, isHold: true }
+      body: { driverId: registeredDriverId, action: 'hold', isHold: true }
     };
     const holdRes = createMockRes();
     await holdHandler(holdReq, holdRes);
@@ -545,13 +545,13 @@ async function main() {
     const inDiscovery = discRes.body?.drivers?.some(d => d.id === registeredDriverId);
 
     if (holdRes.statusCode === 200 && !inDiscovery) {
-      console.log(`[PASS] 21. Admin Hold: Driver put on hold is hidden from customer discovery.`);
+      console.log(`[PASS] 22. Admin Hold: Driver put on hold is hidden from customer discovery.`);
       passed++;
     } else {
       throw new Error(`Driver on hold was still visible in discovery!`);
     }
   } catch (err) {
-    console.error(`[FAIL] 21. Admin hold toggle check failed:`, err.message || err);
+    console.error(`[FAIL] 22. Admin hold toggle check failed:`, err.message || err);
     failed++;
   }
 

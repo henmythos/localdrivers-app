@@ -1,5 +1,5 @@
-import { initDb } from '../_lib/db.js';
-import { verifyAdminAuth } from '../_lib/auth.js';
+import { initDb } from './_lib/db.js';
+import { verifyAdminAuth } from './_lib/auth.js';
 
 export default async function handler(req: any, res: any) {
   const reqId = `bkg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -15,7 +15,7 @@ export default async function handler(req: any, res: any) {
 
   const db = await initDb();
 
-  // GET: Fetch bookings (Single, by phone, by driverId, or admin all)
+  // GET: Fetch bookings (Single by id, by phone, by driverId, or admin all)
   if (req.method === 'GET') {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -96,10 +96,147 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  // POST: Create / Assign Booking (Atomic & Race-Safe)
+  // POST: Create / Trip Start / Trip Complete
   if (req.method === 'POST') {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+      const { action } = body;
+
+      // 1. ACTION: START TRIP
+      if (action === 'start' || action === 'start_trip') {
+        const { bookingId, location } = body;
+        if (!bookingId) {
+          return res.status(400).json({ success: false, error: 'bookingId is required.' });
+        }
+
+        const bkgRes = await db.execute({
+          sql: `SELECT * FROM bookings WHERE id = ?`,
+          args: [bookingId],
+        });
+
+        if (bkgRes.rows.length === 0) {
+          return res.status(404).json({ success: false, error: 'Booking not found.' });
+        }
+
+        const booking = bkgRes.rows[0];
+        const bkgDriverId = String(booking.driver_id);
+        const nowIso = new Date().toISOString();
+        const startLat = location?.latitude || null;
+        const startLon = location?.longitude || null;
+
+        await db.execute({
+          sql: `
+            UPDATE bookings 
+            SET status = 'In Progress',
+                trip_start_time = ?,
+                start_latitude = ?,
+                start_longitude = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?;
+          `,
+          args: [nowIso, startLat, startLon, bookingId],
+        });
+
+        await db.execute({
+          sql: `
+            UPDATE drivers 
+            SET current_work_status = 'on_trip',
+                active_booking_id = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?;
+          `,
+          args: [bookingId, bkgDriverId],
+        });
+
+        return res.status(200).json({
+          success: true,
+          bookingId,
+          status: 'In Progress',
+          tripStartTime: nowIso,
+          driverWorkStatus: 'on_trip',
+          message: 'Trip started successfully. Authoritative timer active.',
+        });
+      }
+
+      // 2. ACTION: COMPLETE TRIP
+      if (action === 'complete' || action === 'complete_trip') {
+        const { bookingId, location } = body;
+        if (!bookingId) {
+          return res.status(400).json({ success: false, error: 'bookingId is required.' });
+        }
+
+        const bkgRes = await db.execute({
+          sql: `SELECT * FROM bookings WHERE id = ?`,
+          args: [bookingId],
+        });
+
+        if (bkgRes.rows.length === 0) {
+          return res.status(404).json({ success: false, error: 'Booking not found.' });
+        }
+
+        const booking = bkgRes.rows[0];
+        const bkgDriverId = String(booking.driver_id);
+        const nowIso = new Date().toISOString();
+        const endLat = location?.latitude || null;
+        const endLon = location?.longitude || null;
+        const startTimeStr = String(booking.trip_start_time || booking.created_at || nowIso);
+        const startTimeMs = new Date(startTimeStr).getTime();
+        const endTimeMs = new Date(nowIso).getTime();
+        const durationMinutes = Math.max(1, Math.round((endTimeMs - startTimeMs) / 60000));
+
+        const estimatedFare = Number(booking.estimated_fare) || 299;
+        const finalFare = Math.max(estimatedFare, estimatedFare);
+
+        await db.execute({
+          sql: `
+            UPDATE bookings 
+            SET status = 'Completed',
+                trip_end_time = ?,
+                trip_duration_minutes = ?,
+                final_fare = ?,
+                end_latitude = ?,
+                end_longitude = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?;
+          `,
+          args: [nowIso, durationMinutes, finalFare, endLat, endLon, bookingId],
+        });
+
+        const driverRes = await db.execute({
+          sql: `SELECT id, is_online, status, is_hold FROM drivers WHERE id = ?`,
+          args: [bkgDriverId],
+        });
+
+        let driverIsOnline = false;
+        if (driverRes.rows.length > 0) {
+          driverIsOnline = Boolean(driverRes.rows[0].is_online);
+        }
+
+        await db.execute({
+          sql: `
+            UPDATE drivers 
+            SET current_work_status = 'available',
+                active_booking_id = NULL,
+                total_trips = total_trips + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?;
+          `,
+          args: [bkgDriverId],
+        });
+
+        return res.status(200).json({
+          success: true,
+          bookingId,
+          status: 'Completed',
+          tripDurationMinutes: durationMinutes,
+          finalFare,
+          driverWorkStatus: 'available',
+          driverIsOnline,
+          message: 'Trip completed. Active-job restriction released.',
+        });
+      }
+
+      // 3. DEFAULT: CREATE / ASSIGN BOOKING (Atomic & Race-Safe)
       const {
         driverId,
         customerName,
@@ -122,7 +259,7 @@ export default async function handler(req: any, res: any) {
         });
       }
 
-      // 1. Idempotency safeguard: check if already submitted
+      // Safeguard: Check idempotency key
       if (idempotencyKey) {
         const existing = await db.execute({
           sql: `SELECT * FROM bookings WHERE idempotency_key = ?`,
@@ -147,7 +284,7 @@ export default async function handler(req: any, res: any) {
         }
       }
 
-      // 2. Validate driver eligibility and perform atomic reservation
+      // Validate driver eligibility and perform atomic reservation
       const driverCheck = await db.execute({
         sql: `SELECT id, name, phone, photo, driver_code, status, is_hold, is_online, current_work_status FROM drivers WHERE id = ?`,
         args: [driverId],
@@ -189,7 +326,7 @@ export default async function handler(req: any, res: any) {
 
       const bookingId = `LD-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
 
-      // 3. Conditional Update: Claim driver atomically (guarantees no double booking)
+      // Conditional Update: Claim driver atomically (guarantees race safety)
       const claimResult = await db.execute({
         sql: `
           UPDATE drivers 
@@ -212,7 +349,7 @@ export default async function handler(req: any, res: any) {
         });
       }
 
-      // 4. Insert booking into database
+      // Insert booking into database
       const dataJson = JSON.stringify(otherDetails || {});
       await db.execute({
         sql: `
@@ -276,7 +413,7 @@ export default async function handler(req: any, res: any) {
       console.error(`[API Create Booking Error ${reqId}]`, error.message || error);
       return res.status(500).json({
         success: false,
-        error: error.message || 'Failed to create booking on server.',
+        error: error.message || 'Failed to process booking on server.',
         requestId: reqId,
       });
     }
