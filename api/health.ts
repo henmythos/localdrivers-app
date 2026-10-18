@@ -47,6 +47,7 @@ export default async function handler(req: any, res: any) {
       driverCount,
       urlConfigured: !!getTursoUrl(),
       tokenConfigured: !!getTursoToken(),
+      tursoHost: getTursoUrl() ? (new URL(getTursoUrl().replace('libsql://', 'https://'))).hostname : null,
       error: dbError,
     },
     storage: {

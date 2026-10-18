@@ -125,8 +125,8 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
     try {
       const url = new URL(req.url, 'http://localhost');
-      const statusParam = url.searchParams.get('status');
-      const idParam = url.searchParams.get('id');
+      const statusParam = url.searchParams.get('status') || req.query?.status;
+      const idParam = url.searchParams.get('id') || req.query?.id;
       const isAdmin = verifyAdminAuth(req);
 
       let sql = `

@@ -19,9 +19,9 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
     try {
       const url = new URL(req.url, 'http://localhost');
-      const idParam = url.searchParams.get('id');
-      const phoneParam = url.searchParams.get('phone');
-      const driverIdParam = url.searchParams.get('driverId');
+      const idParam = url.searchParams.get('id') || req.query?.id;
+      const phoneParam = url.searchParams.get('phone') || req.query?.phone;
+      const driverIdParam = url.searchParams.get('driverId') || req.query?.driverId;
       const isAdmin = verifyAdminAuth(req);
 
       let sql = `SELECT * FROM bookings WHERE 1=1`;
