@@ -77,14 +77,14 @@ export const AdminDriversPage: React.FC = () => {
     setTimeout(() => setActionMsg(null), 5000);
   };
 
-  const handleToggleHold = (driver: Driver) => {
+  const handleToggleHold = async (driver: Driver) => {
     const isCurrentlyHold = driver.isHold || driver.status === 'Hold' || driver.status === 'Payment Due';
     if (isCurrentlyHold) {
       driversService.payCommissionFee(driver.id, driver.pendingCommissionFee || 50);
-      driversService.toggleHold(driver.id, false);
+      await driversService.toggleHoldAsync(driver.id, false);
       setActionMsg(`Released ${driver.name}'s profile. Driver is now active online in customer search.`);
     } else {
-      driversService.toggleHold(driver.id, true);
+      await driversService.toggleHoldAsync(driver.id, true);
       setActionMsg(`Paused ${driver.name}'s profile on Hold. Driver is hidden from customer search.`);
     }
     loadDrivers();
@@ -241,10 +241,14 @@ export const AdminDriversPage: React.FC = () => {
                   <tr key={driver.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
-                        <img src={driver.photo} alt={driver.name} className="w-10 h-10 rounded-xl object-cover" />
+                        <Link to={`/drivers/${driver.id}`} className="shrink-0 group">
+                          <img src={driver.photo} alt={driver.name} className="w-10 h-10 rounded-xl object-cover border border-slate-200 group-hover:border-brand-500 transition-colors" />
+                        </Link>
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-900">{driver.name}</span>
+                            <Link to={`/drivers/${driver.id}`} className="font-bold text-slate-900 hover:text-brand-600 transition-colors">
+                              {driver.name}
+                            </Link>
                             <span className="text-[10px] font-black font-mono bg-brand-100 text-brand-900 px-1.5 py-0.5 rounded border border-brand-300">
                               #{driver.driverCode || 'A1B2C3'}
                             </span>
@@ -292,9 +296,19 @@ export const AdminDriversPage: React.FC = () => {
                           ON HOLD (Hidden)
                         </span>
                       ) : driver.status === 'Approved' ? (
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
-                          APPROVED & ONLINE
-                        </span>
+                        driver.currentWorkStatus === 'on_trip' ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-indigo-100 text-indigo-900 border border-indigo-200">
+                            ON TRIP (Busy)
+                          </span>
+                        ) : driver.isOnline ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
+                            APPROVED & ONLINE
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-slate-200 text-slate-700">
+                            APPROVED (Offline)
+                          </span>
+                        )
                       ) : (
                         <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-700">
                           {driver.status}

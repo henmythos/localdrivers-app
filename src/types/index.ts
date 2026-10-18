@@ -120,7 +120,11 @@ export interface Driver {
   // GPS & Availability
   lastKnownLocation?: GeoLocation;
   lastLocationUpdatedAt?: string;
-  activeBookingId?: string;
+  activeBookingId?: string | null;
+  currentWorkStatus?: 'available' | 'assigned' | 'on_trip' | 'offline';
+  lastOnlineAt?: string;
+  rejectionReason?: string;
+  recentBookings?: any[];
 }
 
 export interface ServiceCategory {

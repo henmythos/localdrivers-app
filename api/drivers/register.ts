@@ -210,11 +210,13 @@ export default async function handler(req: any, res: any) {
         ]
       });
 
-      // Clear old documents for fresh submission
-      await db.execute({
-        sql: `DELETE FROM driver_documents WHERE driver_id = ?;`,
-        args: [driverId]
-      });
+      // Only replace documents if new documents are explicitly provided
+      if (processedDocuments.length > 0) {
+        await db.execute({
+          sql: `DELETE FROM driver_documents WHERE driver_id = ?;`,
+          args: [driverId]
+        });
+      }
     } else {
       await db.execute({
         sql: `INSERT INTO drivers (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { MapPin, Search, Star, ShieldCheck, RotateCcw, SlidersHorizontal, Navigation, Car, Phone } from 'lucide-react';
 import { Driver, FilterState, UserLocation } from '../types';
 import { driversService } from '../services/drivers';
@@ -14,6 +14,7 @@ interface FindDriversPageProps {
 
 export const FindDriversPage: React.FC<FindDriversPageProps> = ({ userLocation, onRequestLocation }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [allDrivers, setAllDrivers] = useState<Driver[]>([]);
   const [filteredDrivers, setFilteredDrivers] = useState<Driver[]>([]);
@@ -22,15 +23,26 @@ export const FindDriversPage: React.FC<FindDriversPageProps> = ({ userLocation, 
   // Radius options up to 30km
   const RADIUS_PRESETS = [5, 10, 15, 20, 25, 30];
 
+  const serviceParam = searchParams.get('service');
+  const availableParam = searchParams.get('availableOnly');
+
   // Filters State
   const [filters, setFilters] = useState<FilterState>({
     searchQuery: '',
-    service: 'All',
+    service: serviceParam || 'All',
     maxDistance: 15, // Default 15km search radius
     minExperience: 0,
     minRating: 0,
-    availableOnly: false,
+    availableOnly: availableParam === 'true',
   });
+
+  // Keep filters updated if query param changes
+  useEffect(() => {
+    const s = searchParams.get('service');
+    if (s && s !== filters.service) {
+      setFilters(prev => ({ ...prev, service: s }));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     driversService.getApprovedDriversAsync().then(list => {

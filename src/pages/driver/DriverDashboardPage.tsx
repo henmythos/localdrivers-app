@@ -39,6 +39,10 @@ export const DriverDashboardPage: React.FC = () => {
     }
   );
 
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const [availabilitySuccessMsg, setAvailabilitySuccessMsg] = useState<string | null>(null);
+  const [isTogglingAvailability, setIsTogglingAvailability] = useState<boolean>(false);
+
   const loadData = () => {
     const state = authService.getAuthState();
     if (!state.isDriverAuthenticated || !state.driver) {
@@ -48,6 +52,15 @@ export const DriverDashboardPage: React.FC = () => {
     const currentDriver = driversService.getDriverById(state.driver.id) || state.driver;
     setDriver(currentDriver);
     setDriverBookings(bookingsService.getDriverBookings(currentDriver.id));
+
+    // Re-verify latest state from server
+    driversService.getDriverByIdAsync(state.driver.id).then(fresh => {
+      if (fresh) {
+        setDriver(fresh);
+      }
+    }).catch(err => {
+      console.warn('[DriverDashboard] Background state sync note:', err);
+    });
   };
 
   useEffect(() => {
@@ -91,19 +104,51 @@ export const DriverDashboardPage: React.FC = () => {
 
   const handleToggleOnline = async () => {
     if (isHold) {
-      alert('Your profile is currently on Hold / Payment Due. Please settle the outstanding platform fee to go Online.');
+      setAvailabilityError('Your profile is currently on Hold / Payment Due. Please settle the outstanding platform fee to go Online.');
+      setTimeout(() => setAvailabilityError(null), 5000);
+      return;
+    }
+
+    if (driver.status === 'Pending' || driver.status === 'Rejected') {
+      setAvailabilityError(`Cannot go online while driver profile is ${driver.status}. Admin verification approval is required.`);
+      setTimeout(() => setAvailabilityError(null), 5000);
       return;
     }
 
     const nextState = !driver.isOnline;
-    let geo = undefined;
-    if (nextState) {
-      // Capture GPS location when driver goes online
-      geo = await gpsService.captureEventLocation('Driver Online');
-    }
+    setIsTogglingAvailability(true);
+    setAvailabilityError(null);
+    setAvailabilitySuccessMsg(null);
 
-    const updated = driversService.toggleOnline(driver.id, nextState, geo);
-    if (updated) setDriver(updated);
+    try {
+      let geo = undefined;
+      if (nextState) {
+        try {
+          geo = await gpsService.captureEventLocation('Driver Online');
+        } catch {}
+      }
+
+      // Persist to server database first
+      const res = await driversService.toggleOnlineAsync(driver.id, nextState, geo);
+
+      if (res.success && res.driver) {
+        setDriver(res.driver);
+        setAvailabilitySuccessMsg(res.message || (nextState ? 'You are now Online and visible in customer search!' : 'You are now Offline.'));
+        setTimeout(() => setAvailabilitySuccessMsg(null), 4000);
+      } else {
+        throw new Error(res.error || 'Server rejected availability update.');
+      }
+    } catch (err: any) {
+      console.error('[Driver Dashboard] Availability toggle error:', err);
+      setAvailabilityError(err.message || 'Failed to update online status on server. Your saved state was restored.');
+      setTimeout(() => setAvailabilityError(null), 5000);
+      // Re-fetch authoritative state from server
+      driversService.getDriverByIdAsync(driver.id).then(fresh => {
+        if (fresh) setDriver(fresh);
+      });
+    } finally {
+      setIsTogglingAvailability(false);
+    }
   };
 
   const handleAcceptRequest = (bookingId: string) => {
@@ -128,7 +173,7 @@ export const DriverDashboardPage: React.FC = () => {
     const startLocation = await gpsService.captureEventLocation('Trip Start');
     const odoVal = odometerStartInput.trim() ? Number(odometerStartInput.trim()) : undefined;
 
-    bookingsService.startTrip(startTripBooking.id, startLocation, odoVal);
+    await bookingsService.startTripAsync(startTripBooking.id, startLocation, odoVal);
     setIsStartingTrip(false);
     setStartTripBooking(null);
     setOdometerStartInput('');
@@ -143,7 +188,7 @@ export const DriverDashboardPage: React.FC = () => {
     const endLocation = await gpsService.captureEventLocation('Trip End');
     const odoVal = odometerEndInput.trim() ? Number(odometerEndInput.trim()) : undefined;
 
-    bookingsService.completeTrip(endTripBooking.id, endLocation, 'driver', odoVal);
+    await bookingsService.completeTripAsync(endTripBooking.id, endLocation, 'driver', odoVal);
     setIsEndingTrip(false);
     setEndTripBooking(null);
     setOdometerEndInput('');

@@ -217,23 +217,44 @@ export const AdminDashboardPage: React.FC = () => {
           <div className="space-y-3">
             {approvedDrivers.length > 0 ? (
               approvedDrivers.slice(0, 5).map(driver => (
-                <div key={driver.id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                <Link
+                  key={driver.id}
+                  to={`/drivers/${driver.id}`}
+                  className="p-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100/90 border border-slate-100 flex items-center justify-between transition-all group"
+                  title="View Driver Profile"
+                >
                   <div className="flex items-center gap-3">
                     <img src={driver.photo} alt={driver.name} className="w-10 h-10 rounded-xl object-cover" />
                     <div>
-                      <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{driver.name}</h4>
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="font-bold text-slate-900 text-xs sm:text-sm group-hover:text-brand-600 transition-colors">{driver.name}</h4>
+                        <span className="text-[9px] font-mono font-bold bg-brand-50 text-brand-900 px-1.5 py-0.2 rounded border border-brand-200">
+                          #{driver.driverCode || 'Code'}
+                        </span>
+                      </div>
                       <span className="text-[11px] text-slate-500">{driver.area} • {driver.experienceYears} yrs exp</span>
                     </div>
                   </div>
 
-                  <div className="text-right">
-                    <span className="text-xs font-bold text-amber-500 flex items-center justify-end gap-1">
-                      <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                      {driver.rating}
-                    </span>
-                    <span className="text-[10px] text-emerald-600 font-bold">{driver.totalTrips} trips</span>
+                  <div className="text-right flex items-center gap-2">
+                    <div>
+                      <span className="text-xs font-bold text-amber-500 flex items-center justify-end gap-1">
+                        <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                        {driver.rating}
+                      </span>
+                      <span className="text-[10px] text-emerald-600 font-bold block">{driver.totalTrips} trips</span>
+                    </div>
+                    {driver.isOnline ? (
+                      <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        ONLINE
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600">
+                        OFFLINE
+                      </span>
+                    )}
                   </div>
-                </div>
+                </Link>
               ))
             ) : (
               <p className="text-xs text-slate-400 py-8 text-center font-medium">

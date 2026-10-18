@@ -92,6 +92,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
   // Confirmed booking response
   const [createdBooking, setCreatedBooking] = useState<Booking | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
 
   // Auto-calculate Road Route via OSRM whenever points or return-trip setting changes
   useEffect(() => {
@@ -227,11 +229,15 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     returnJourneyOption: returnJourneyOption,
   });
 
-  const handleConfirmBooking = () => {
+  const handleConfirmBooking = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmissionError(null);
+
     const vehicleDetail = vehicleModel.trim() ? `${vehicleModel.trim()} (${transmission})` : `${transmission} Transmission`;
     const fullNotes = `Vehicle: ${vehicleDetail}${notes.trim() ? ` • ${notes.trim()}` : ''}`;
-    
-    const booking = bookingsService.createBooking({
+
+    const bookingPayload = {
       driverId: driver.id,
       driverName: driver.name,
       driverPhoto: driver.photo,
@@ -287,15 +293,25 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         extraPerKmRate: adminConfig.outstationExtraKmRate,
         waitingChargePerHour: adminConfig.waitingChargePerHour,
       },
-    });
+    };
 
-    if (customerName.trim()) {
-      localStorage.setItem('localdrivers_customer_name', customerName.trim());
+    try {
+      const res = await bookingsService.createBookingAsync(bookingPayload);
+      if (res.success && res.booking) {
+        if (customerName.trim()) {
+          localStorage.setItem('localdrivers_customer_name', customerName.trim());
+        }
+        setCreatedBooking(res.booking);
+        setStep(7); // Confirmation Screen
+        onBookingComplete(res.booking);
+      } else {
+        setSubmissionError(res.error || 'The driver is no longer available. Please select another driver.');
+      }
+    } catch (err: any) {
+      setSubmissionError(err.message || 'An unexpected error occurred while confirming booking. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setCreatedBooking(booking);
-    setStep(7); // Confirmation Screen
-    onBookingComplete(booking);
   };
 
   return createPortal(
@@ -1325,20 +1341,56 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 />
               </div>
 
+              {submissionError && (
+                <div className="mt-4 p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-xs text-red-800">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-bold">{submissionError}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        navigate('/find-drivers');
+                      }}
+                      className="mt-2 text-xs font-black text-brand-700 underline hover:text-brand-800 flex items-center gap-1"
+                    >
+                      View other available drivers near you &rarr;
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-6 flex items-center justify-between">
                 <button
+                  type="button"
+                  disabled={isSubmitting}
                   onClick={() => setStep(5)}
-                  className="px-4 py-2.5 text-slate-600 font-bold text-sm hover:bg-slate-100 rounded-xl flex items-center gap-1.5"
+                  className="px-4 py-2.5 text-slate-600 font-bold text-sm hover:bg-slate-100 rounded-xl flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   Back to Duration
                 </button>
                 <button
+                  type="button"
+                  disabled={isSubmitting}
                   onClick={handleConfirmBooking}
-                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-600/25 flex items-center gap-2"
+                  className={`px-6 py-3 font-extrabold text-sm rounded-xl shadow-lg flex items-center gap-2 transition-all ${
+                    isSubmitting
+                      ? 'bg-emerald-400 cursor-not-allowed text-white shadow-none'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25'
+                  }`}
                 >
-                  <CheckCircle2 className="w-5 h-5" />
-                  Confirm Booking
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Confirming...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-5 h-5" />
+                      <span>Confirm Booking</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

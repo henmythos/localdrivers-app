@@ -109,6 +109,25 @@ export async function initDb(): Promise<Client> {
       );
     `);
 
+    // Safe column migrations on drivers table
+    const safeAddColumns = [
+      "ALTER TABLE drivers ADD COLUMN current_work_status TEXT DEFAULT 'available';",
+      "ALTER TABLE drivers ADD COLUMN active_booking_id TEXT;",
+      "ALTER TABLE drivers ADD COLUMN last_online_at TEXT;",
+      "ALTER TABLE drivers ADD COLUMN last_location_at TEXT;"
+    ];
+
+    for (const alterSql of safeAddColumns) {
+      try {
+        await db.execute(alterSql);
+      } catch (colErr: any) {
+        // Ignore duplicate column errors
+        if (!colErr.message?.includes('duplicate column')) {
+          // console.warn('[DB Migration]', colErr.message);
+        }
+      }
+    }
+
     // 2. Driver Documents Table
     await db.execute(`
       CREATE TABLE IF NOT EXISTS driver_documents (
@@ -122,12 +141,53 @@ export async function initDb(): Promise<Client> {
       );
     `);
 
+    // 3. Bookings Table
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS bookings (
+        id TEXT PRIMARY KEY,
+        customer_name TEXT NOT NULL,
+        customer_phone TEXT NOT NULL,
+        driver_id TEXT NOT NULL,
+        driver_name TEXT NOT NULL,
+        driver_phone TEXT,
+        driver_photo TEXT,
+        driver_code TEXT,
+        service_title TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Pending',
+        pickup_location TEXT NOT NULL,
+        destination_location TEXT NOT NULL,
+        pickup_coords TEXT,
+        destination_coords TEXT,
+        date TEXT,
+        time TEXT,
+        notes TEXT,
+        estimated_fare REAL NOT NULL,
+        final_fare REAL,
+        trip_start_time TEXT,
+        trip_end_time TEXT,
+        trip_duration_minutes INTEGER,
+        waiting_duration_minutes INTEGER DEFAULT 0,
+        start_latitude REAL,
+        start_longitude REAL,
+        end_latitude REAL,
+        end_longitude REAL,
+        idempotency_key TEXT UNIQUE,
+        data_json TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (driver_id) REFERENCES drivers(id)
+      );
+    `);
+
     // Indexes for high performance
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_drivers_phone ON drivers(phone);`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_drivers_status ON drivers(status);`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_driver_docs_driver_id ON driver_documents(driver_id);`);
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_driver_id ON bookings(driver_id);`);
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);`);
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_customer_phone ON bookings(customer_phone);`);
 
-    // 3. Admin Users Table
+    // 4. Admin Users Table
     await db.execute(`
       CREATE TABLE IF NOT EXISTS admin_users (
         id TEXT PRIMARY KEY,
@@ -186,10 +246,25 @@ export async function initDb(): Promise<Client> {
           rejection_reason TEXT,
           reviewed_by TEXT,
           reviewed_at TEXT,
+          current_work_status TEXT DEFAULT 'available',
+          active_booking_id TEXT,
+          last_online_at TEXT,
+          last_location_at TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
+      const safeAddColumnsLocal = [
+        "ALTER TABLE drivers ADD COLUMN current_work_status TEXT DEFAULT 'available';",
+        "ALTER TABLE drivers ADD COLUMN active_booking_id TEXT;",
+        "ALTER TABLE drivers ADD COLUMN last_online_at TEXT;",
+        "ALTER TABLE drivers ADD COLUMN last_location_at TEXT;"
+      ];
+      for (const alterSql of safeAddColumnsLocal) {
+        try { await dbClient.execute(alterSql); } catch {}
+      }
+
       await dbClient.execute(`
         CREATE TABLE IF NOT EXISTS driver_documents (
           id TEXT PRIMARY KEY,
@@ -200,6 +275,43 @@ export async function initDb(): Promise<Client> {
           uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
+      await dbClient.execute(`
+        CREATE TABLE IF NOT EXISTS bookings (
+          id TEXT PRIMARY KEY,
+          customer_name TEXT NOT NULL,
+          customer_phone TEXT NOT NULL,
+          driver_id TEXT NOT NULL,
+          driver_name TEXT NOT NULL,
+          driver_phone TEXT,
+          driver_photo TEXT,
+          driver_code TEXT,
+          service_title TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'Pending',
+          pickup_location TEXT NOT NULL,
+          destination_location TEXT NOT NULL,
+          pickup_coords TEXT,
+          destination_coords TEXT,
+          date TEXT,
+          time TEXT,
+          notes TEXT,
+          estimated_fare REAL NOT NULL,
+          final_fare REAL,
+          trip_start_time TEXT,
+          trip_end_time TEXT,
+          trip_duration_minutes INTEGER,
+          waiting_duration_minutes INTEGER DEFAULT 0,
+          start_latitude REAL,
+          start_longitude REAL,
+          end_latitude REAL,
+          end_longitude REAL,
+          idempotency_key TEXT UNIQUE,
+          data_json TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
       isInitialized = true;
       return dbClient;
     }

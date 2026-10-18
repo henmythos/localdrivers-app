@@ -38,7 +38,8 @@ export default async function handler(req: any, res: any) {
         experience_years, languages, services, vehicle_categories, status,
         is_online, is_hold, pending_commission_fee, starting_price,
         distance_km, latitude, longitude, area, city, verification_badge,
-        description, joined_date, created_at
+        description, joined_date, created_at,
+        current_work_status, active_booking_id, last_online_at
       FROM drivers
       ORDER BY created_at DESC;
     `);
@@ -112,6 +113,9 @@ export default async function handler(req: any, res: any) {
         documents,
         description: String(row.description || ''),
         joinedDate: String(row.joined_date || row.created_at || ''),
+        currentWorkStatus: (row.current_work_status as any) || (Boolean(row.is_online) ? 'available' : 'offline'),
+        activeBookingId: row.active_booking_id ? String(row.active_booking_id) : undefined,
+        lastOnlineAt: row.last_online_at ? String(row.last_online_at) : undefined,
       });
     }
 

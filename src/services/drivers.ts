@@ -65,11 +65,95 @@ export const driversService = {
     });
 
     if (res.success && res.data && Array.isArray(res.data.drivers)) {
+      // Synchronize into local storage cache
+      for (const d of res.data.drivers) {
+        try {
+          dbService.updateDriver(d.id, d);
+        } catch {}
+      }
       return res.data.drivers;
     }
 
     console.warn('[Drivers Service] API discovery query failed, falling back to local database:', res.error);
     return dbService.getApprovedDrivers();
+  },
+
+  // Fetch single driver profile by stable ID from server
+  async getDriverByIdAsync(id: string): Promise<Driver | null> {
+    const authState = authService.getAuthState();
+    const isAdmin = authState.isAdminAuthenticated;
+
+    const endpoint = isAdmin
+      ? `/api/admin/driver-detail?id=${encodeURIComponent(id)}`
+      : `/api/drivers?id=${encodeURIComponent(id)}`;
+
+    const headers = isAdmin ? authService.getAdminAuthHeaders() : undefined;
+
+    const res = await apiClient.get<{ driver?: Driver; drivers?: Driver[] }>(endpoint, {
+      headers,
+      fallbackErrorMessage: 'Unable to retrieve driver profile from server.',
+    });
+
+    if (res.success && res.data) {
+      const driver = res.data.driver || (Array.isArray(res.data.drivers) ? res.data.drivers[0] : null);
+      if (driver) {
+        try {
+          dbService.updateDriver(driver.id, driver);
+        } catch {}
+        return driver;
+      }
+    }
+
+    console.warn(`[Drivers Service] Server query for driver ${id} returned:`, res.error);
+    // Fallback to local storage if available
+    const local = dbService.getDriverById(id);
+    return local || null;
+  },
+
+  // Toggle Driver Online / Offline with Server Persistence
+  async toggleOnlineAsync(
+    id: string,
+    isOnline: boolean,
+    location?: any
+  ): Promise<{ success: boolean; driver?: Driver; error?: string; message?: string }> {
+    const res = await apiClient.post<{
+      success: boolean;
+      driverId: string;
+      isOnline: boolean;
+      status: string;
+      currentWorkStatus: string;
+      isBookable: boolean;
+      message?: string;
+      error?: string;
+    }>('/api/drivers/availability', {
+      driverId: id,
+      isOnline,
+      latitude: location?.latitude,
+      longitude: location?.longitude,
+    }, {
+      fallbackErrorMessage: 'Could not update online status. Please check your network connection.',
+    });
+
+    if (res.success && res.data?.success) {
+      // Update local cache
+      const updated = dbService.toggleDriverOnline(id, res.data.isOnline, location);
+      if (updated) {
+        dbService.updateDriverProfile(id, {
+          currentWorkStatus: res.data.currentWorkStatus as any,
+          lastOnlineAt: new Date().toISOString(),
+        });
+      }
+      return {
+        success: true,
+        driver: updated || undefined,
+        message: res.data.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: res.error || res.data?.error || 'Failed to update online status on server.',
+    };
   },
 
   // Register driver with real database persistence
@@ -215,7 +299,7 @@ export const driversService = {
         return false;
       }
 
-      if (filters.availableOnly && !driver.isOnline) {
+      if (filters.availableOnly && (!driver.isOnline || driver.isHold || driver.currentWorkStatus === 'on_trip')) {
         return false;
       }
 
@@ -236,7 +320,22 @@ export const driversService = {
     return dbService.updateDriverStatus(id, 'Rejected');
   },
 
+  async toggleHoldAsync(id: string, isHold: boolean): Promise<boolean> {
+    const res = await apiClient.post<{ success: boolean }>(
+      '/api/admin/hold',
+      { driverId: id, isHold },
+      {
+        headers: authService.getAdminAuthHeaders(),
+        fallbackErrorMessage: 'Failed to update hold status on server.',
+      }
+    );
+
+    dbService.toggleDriverHold(id, isHold);
+    return res.success;
+  },
+
   toggleHold(id: string, isHold: boolean): Driver | undefined {
+    this.toggleHoldAsync(id, isHold).catch(console.error);
     return dbService.toggleDriverHold(id, isHold);
   },
 

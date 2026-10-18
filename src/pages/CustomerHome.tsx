@@ -22,23 +22,44 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
   const [selectedDriverForBooking, setSelectedDriverForBooking] = useState<Driver | null>(null);
   const [preselectedService, setPreselectedService] = useState<any>(undefined);
   const [activeFilterChip, setActiveFilterChip] = useState<'all' | 'top_rated' | 'nearby' | 'available'>('all');
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const loadData = () => {
-    const rawDrivers = driversService.getApprovedDrivers();
-    const sorted = driversService.filterDrivers(
-      rawDrivers,
-      {
-        searchQuery: '',
-        service: 'All',
-        maxDistance: 30,
-        minExperience: 0,
-        minRating: 0,
-        availableOnly: false,
-      },
-      userLocation
-    );
-    setDrivers(sorted);
-    setServices(dbService.getServices());
+  const loadData = async () => {
+    try {
+      const liveDrivers = await driversService.getApprovedDriversAsync();
+      const sorted = driversService.filterDrivers(
+        liveDrivers,
+        {
+          searchQuery: '',
+          service: 'All',
+          maxDistance: 30,
+          minExperience: 0,
+          minRating: 0,
+          availableOnly: false,
+        },
+        userLocation
+      );
+      setDrivers(sorted);
+    } catch (err) {
+      console.warn('[CustomerHome] Could not load live drivers:', err);
+      const rawDrivers = driversService.getApprovedDrivers();
+      const sorted = driversService.filterDrivers(
+        rawDrivers,
+        {
+          searchQuery: '',
+          service: 'All',
+          maxDistance: 30,
+          minExperience: 0,
+          minRating: 0,
+          availableOnly: false,
+        },
+        userLocation
+      );
+      setDrivers(sorted);
+    } finally {
+      setIsLoading(false);
+      setServices(dbService.getServices());
+    }
   };
 
   useEffect(() => {
@@ -49,18 +70,37 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
     return () => unsubscribe();
   }, [userLocation]);
 
+  const handleHeroBookDriver = () => {
+    const availableDriver = displayedDrivers.find(d => d.isOnline && d.currentWorkStatus !== 'on_trip') ||
+      displayedDrivers.find(d => d.isOnline) ||
+      displayedDrivers[0] ||
+      drivers[0];
+
+    if (availableDriver) {
+      setSelectedDriverForBooking(availableDriver);
+    } else {
+      navigate('/find-drivers');
+    }
+  };
+
   const handleSelectCategory = (serviceName: string) => {
     setPreselectedService(serviceName);
-    const driver = drivers.find(d => d.services.includes(serviceName as any)) || drivers[0];
-    if (driver) {
-      setSelectedDriverForBooking(driver);
+    const matchingDriver = drivers.find(d => d.services.includes(serviceName as any) && d.isOnline && d.currentWorkStatus !== 'on_trip') ||
+      drivers.find(d => d.services.includes(serviceName as any) && d.isOnline) ||
+      drivers.find(d => d.services.includes(serviceName as any)) ||
+      drivers[0];
+
+    if (matchingDriver) {
+      setSelectedDriverForBooking(matchingDriver);
+    } else {
+      navigate(`/find-drivers?service=${encodeURIComponent(serviceName)}`);
     }
   };
 
   const displayedDrivers = drivers.filter(d => {
     if (activeFilterChip === 'top_rated') return d.rating >= 4.8;
     if (activeFilterChip === 'nearby') return d.distanceKm <= 5.0;
-    if (activeFilterChip === 'available') return d.isOnline;
+    if (activeFilterChip === 'available') return d.isOnline && d.currentWorkStatus !== 'on_trip';
     return true;
   });
 
@@ -88,9 +128,23 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
                 Drivers at Your Service
               </p>
 
-              <div className="mt-3 sm:mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-400 text-navy-900 font-extrabold text-xs shadow-sm self-start">
-                <Clock className="w-4 h-4 fill-current stroke-none" />
-                <span>24 Hours Available</span>
+              <div className="mt-3 sm:mt-4 flex flex-wrap items-center gap-2.5">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-400 text-navy-900 font-extrabold text-xs shadow-sm self-start">
+                  <Clock className="w-4 h-4 fill-current stroke-none" />
+                  <span>24 Hours Available</span>
+                </div>
+
+                {/* Primary HERO Book Driver CTA Button */}
+                <button
+                  id="home-hero-book-driver-btn"
+                  onClick={handleHeroBookDriver}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                  title="Book a Verified Driver Now"
+                >
+                  <Car className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Book Driver</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           </div>

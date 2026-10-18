@@ -44,8 +44,14 @@ export const BookingDetailPage: React.FC = () => {
 
   const [nowTimestamp, setNowTimestamp] = useState(Date.now());
 
-  const loadBooking = () => {
+  const loadBooking = async () => {
     if (id) {
+      const live = await bookingsService.getBookingByIdAsync(id);
+      if (live) {
+        setBooking(live);
+        checkAuthorization(live);
+        return;
+      }
       const found = bookingsService.getBookingById(id);
       if (found) {
         setBooking(found);
@@ -136,13 +142,19 @@ export const BookingDetailPage: React.FC = () => {
     if (!booking) return;
     setIsEndingTrip(true);
 
-    // Capture end GPS location
-    const endLocation = await gpsService.captureEventLocation('Trip End');
-    const odometerVal = odometerInput.trim() ? Number(odometerInput.trim()) : undefined;
+    try {
+      // Capture end GPS location
+      const endLocation = await gpsService.captureEventLocation('Trip End');
+      const odometerVal = odometerInput.trim() ? Number(odometerInput.trim()) : undefined;
 
-    bookingsService.completeTrip(booking.id, endLocation, 'customer', odometerVal);
-    setIsEndingTrip(false);
-    setShowEndTripModal(false);
+      await bookingsService.completeTripAsync(booking.id, endLocation, 'customer', odometerVal);
+      loadBooking();
+    } catch (err) {
+      console.error('Failed to complete trip:', err);
+    } finally {
+      setIsEndingTrip(false);
+      setShowEndTripModal(false);
+    }
   };
 
   // Customer Dispute Submit

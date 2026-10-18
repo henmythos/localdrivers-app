@@ -1,5 +1,7 @@
 import { dbService } from './database';
 import { Booking, BookingStatus, GeoLocation, AdminPricingConfig } from '../types';
+import { apiClient } from './apiClient';
+import { authService } from './auth';
 
 const MY_BOOKINGS_STORAGE_KEY = 'localdrivers_customer_booking_ids';
 
@@ -24,10 +26,47 @@ export const bookingsService = {
     return dbService.getBookings();
   },
 
+  // Fetch live bookings from server
+  async getAllBookingsAsync(): Promise<Booking[]> {
+    const res = await apiClient.get<{ bookings: Booking[] }>('/api/bookings', {
+      headers: authService.getAdminAuthHeaders(),
+      fallbackErrorMessage: 'Unable to retrieve live bookings from server.',
+    });
+
+    if (res.success && res.data && Array.isArray(res.data.bookings)) {
+      return res.data.bookings;
+    }
+    return this.getAllBookings();
+  },
+
   // Get booking details by ID
   getBookingById(id: string): Booking | undefined {
     this.checkAndAutoPassPendingBookings();
     return dbService.getBookingById(id);
+  },
+
+  // Get booking details by ID from server with fallback to local cache
+  async getBookingByIdAsync(id: string): Promise<Booking | null> {
+    const res = await apiClient.get<{ booking?: Booking; bookings?: Booking[] }>(
+      `/api/bookings?id=${encodeURIComponent(id)}`,
+      {
+        headers: authService.getAdminAuthHeaders(),
+        fallbackErrorMessage: 'Unable to retrieve booking details from server.',
+      }
+    );
+
+    if (res.success && res.data) {
+      const b = res.data.booking || (Array.isArray(res.data.bookings) ? res.data.bookings[0] : null);
+      if (b) {
+        try {
+          dbService.createBooking(b);
+        } catch {}
+        return b;
+      }
+    }
+
+    const local = dbService.getBookingById(id);
+    return local || null;
   },
 
   // Get customer local bookings filtered by verified customer phone number
@@ -69,7 +108,51 @@ export const bookingsService = {
     return dbService.getBookingsForDriver(driverId);
   },
 
-  // Create a new booking (Customer)
+  // Create a new booking (Customer) with server persistence and race safety
+  async createBookingAsync(
+    bookingInput: Omit<Booking, 'id' | 'createdAt' | 'updatedAt' | 'status'>
+  ): Promise<{ success: boolean; booking?: Booking; error?: string }> {
+    const idempotencyKey = `bkg-idem-${bookingInput.driverId}-${bookingInput.customerPhone.replace(/\D/g, '')}-${Date.now()}`;
+
+    const res = await apiClient.post<{ success: boolean; booking?: Booking; error?: string }>(
+      '/api/bookings',
+      {
+        ...bookingInput,
+        idempotencyKey,
+      },
+      {
+        fallbackErrorMessage: 'Could not submit your booking right now. Please try again.',
+      }
+    );
+
+    if (res.success && res.data?.booking) {
+      const serverBooking = res.data.booking;
+      // Save locally to dbService for reactive UI updates
+      try {
+        dbService.createBooking({
+          ...bookingInput,
+          ...serverBooking,
+        });
+      } catch {}
+
+      localStorage.setItem('localdrivers_verified_customer_phone', bookingInput.customerPhone);
+      const rawIds = localStorage.getItem(MY_BOOKINGS_STORAGE_KEY);
+      const savedIds: string[] = rawIds ? JSON.parse(rawIds) : [];
+      if (!savedIds.includes(serverBooking.id)) {
+        savedIds.unshift(serverBooking.id);
+        localStorage.setItem(MY_BOOKINGS_STORAGE_KEY, JSON.stringify(savedIds));
+      }
+
+      return { success: true, booking: serverBooking };
+    }
+
+    return {
+      success: false,
+      error: res.error || res.data?.error || 'Booking could not be assigned. The driver may have become unavailable.',
+    };
+  },
+
+  // Synchronous create booking fallback
   createBooking(bookingInput: Omit<Booking, 'id' | 'createdAt' | 'updatedAt' | 'status'>): Booking {
     const booking = dbService.createBooking(bookingInput);
 
@@ -82,6 +165,9 @@ export const bookingsService = {
       localStorage.setItem(MY_BOOKINGS_STORAGE_KEY, JSON.stringify(savedIds));
     }
 
+    // Call server asynchronously
+    this.createBookingAsync(bookingInput).catch(console.error);
+
     return booking;
   },
 
@@ -91,17 +177,71 @@ export const bookingsService = {
   },
 
   // Start Trip (Authoritative Server Timestamp & Location Capture)
+  async startTripAsync(id: string, location?: GeoLocation, odometerStartKm?: number): Promise<{ success: boolean; booking?: Booking; error?: string }> {
+    const res = await apiClient.post<{ success: boolean; bookingId: string; tripStartTime: string; status: string; error?: string }>(
+      '/api/bookings/trip',
+      {
+        action: 'start',
+        bookingId: id,
+        location,
+        odometerKm: odometerStartKm,
+      },
+      {
+        fallbackErrorMessage: 'Failed to start trip on server. Please check your connection.',
+      }
+    );
+
+    const localBooking = dbService.startTrip(id, location, odometerStartKm);
+    if (res.success && res.data?.success) {
+      return { success: true, booking: localBooking };
+    }
+
+    return { success: false, booking: localBooking, error: res.error || res.data?.error };
+  },
+
   startTrip(id: string, location?: GeoLocation, odometerStartKm?: number): Booking | undefined {
+    // Send to server asynchronously
+    this.startTripAsync(id, location, odometerStartKm).catch(console.error);
     return dbService.startTrip(id, location, odometerStartKm);
   },
 
   // Complete Trip (Idempotent duration calculation, distance verification, itemized charges)
+  async completeTripAsync(
+    id: string,
+    location?: GeoLocation,
+    completedBy: 'customer' | 'driver' = 'customer',
+    odometerEndKm?: number
+  ): Promise<{ success: boolean; booking?: Booking; error?: string }> {
+    const res = await apiClient.post<{ success: boolean; bookingId: string; tripDurationMinutes: number; finalFare: number; error?: string }>(
+      '/api/bookings/trip',
+      {
+        action: 'complete',
+        bookingId: id,
+        location,
+        odometerKm: odometerEndKm,
+        completedBy,
+      },
+      {
+        fallbackErrorMessage: 'Failed to complete trip on server. Please check your connection.',
+      }
+    );
+
+    const localBooking = dbService.completeTrip(id, location, completedBy, odometerEndKm);
+    if (res.success && res.data?.success) {
+      return { success: true, booking: localBooking };
+    }
+
+    return { success: false, booking: localBooking, error: res.error || res.data?.error };
+  },
+
   completeTrip(
     id: string,
     location?: GeoLocation,
     completedBy: 'customer' | 'driver' = 'customer',
     odometerEndKm?: number
   ): Booking | undefined {
+    // Send to server asynchronously
+    this.completeTripAsync(id, location, completedBy, odometerEndKm).catch(console.error);
     return dbService.completeTrip(id, location, completedBy, odometerEndKm);
   },
 
