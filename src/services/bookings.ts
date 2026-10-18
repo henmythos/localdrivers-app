@@ -245,6 +245,20 @@ export const bookingsService = {
     return dbService.completeTrip(id, location, completedBy, odometerEndKm);
   },
 
+  // Cancel Booking (Server-Authoritative Status & Driver Assignment Release)
+  async cancelBookingAsync(id: string, reason?: string): Promise<{ success: boolean; error?: string }> {
+    const res = await apiClient.post<{ success: boolean; error?: string }>(
+      '/api/bookings',
+      { action: 'cancel', bookingId: id, reason },
+      { fallbackErrorMessage: 'Failed to cancel booking on server.' }
+    );
+    if (res.success && res.data?.success) {
+      dbService.updateBookingStatus(id, 'Cancelled');
+      return { success: true };
+    }
+    return { success: false, error: res.error || res.data?.error };
+  },
+
   // Raise dispute
   raiseDispute(id: string, reason: string): Booking | undefined {
     return dbService.raiseTripDispute(id, reason);

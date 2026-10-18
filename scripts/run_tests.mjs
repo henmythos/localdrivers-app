@@ -555,6 +555,116 @@ async function main() {
     failed++;
   }
 
+  // 23. Test Customer Booking Cancellation & Driver Release
+  try {
+    const unholdHandler = await loadHandler('api/admin/approve.ts');
+    await unholdHandler({
+      method: 'POST',
+      headers: { 'x-admin-auth': 'localdrivers_admin_session_token', 'content-type': 'application/json' },
+      body: { driverId: registeredDriverId, action: 'hold', isHold: false }
+    }, createMockRes());
+
+    const bkgHandler = await loadHandler('api/bookings.ts');
+    const newBkgRes = createMockRes();
+    await bkgHandler({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: {
+        driverId: registeredDriverId,
+        customerName: 'Cancel Test',
+        customerPhone: '9848099112',
+        serviceTitle: 'City Driver',
+        pickupLocation: 'Jubilee Hills',
+        destinationLocation: 'Banjara Hills',
+        estimatedFare: 299,
+        idempotencyKey: `cancel-test-${Date.now()}`
+      }
+    }, newBkgRes);
+
+    const cancelBookingId = newBkgRes.body?.booking?.id;
+    const cancelRes = createMockRes();
+    await bkgHandler({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: { action: 'cancel', bookingId: cancelBookingId }
+    }, cancelRes);
+
+    const drvHandler = await loadHandler('api/drivers/index.ts');
+    const drvRes = createMockRes();
+    await drvHandler({ method: 'GET', url: `/api/drivers?id=${registeredDriverId}`, headers: {} }, drvRes);
+
+    if (cancelRes.statusCode === 200 && cancelRes.body?.status === 'Cancelled' && drvRes.body?.driver?.currentWorkStatus === 'available') {
+      console.log(`[PASS] 23. Booking Cancellation: Booking cancelled and driver assignment released safely.`);
+      passed++;
+    } else {
+      throw new Error(`Cancellation failed: ${JSON.stringify(cancelRes.body)}`);
+    }
+  } catch (err) {
+    console.error(`[FAIL] 23. Booking cancellation check failed:`, err.message || err);
+    failed++;
+  }
+
+  // 24. Test Driver Offline Before Trip Remains Offline After Completion
+  try {
+    const drvHandler = await loadHandler('api/drivers/index.ts');
+    const bkgHandler = await loadHandler('api/bookings.ts');
+
+    // Step a: Create a booking while online
+    const bkgRes = createMockRes();
+    await bkgHandler({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: {
+        driverId: registeredDriverId,
+        customerName: 'Offline Test Customer',
+        customerPhone: '9848077665',
+        serviceTitle: 'City Driver',
+        pickupLocation: 'Gachibowli',
+        destinationLocation: 'Hitec City',
+        estimatedFare: 349,
+        idempotencyKey: `offline-trip-${Date.now()}`
+      }
+    }, bkgRes);
+    const testBkgId = bkgRes.body?.booking?.id;
+
+    // Step b: Start the trip
+    await bkgHandler({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: { action: 'start', bookingId: testBkgId }
+    }, createMockRes());
+
+    // Step c: Driver toggles OFFLINE during trip (e.g. will not take jobs after finishing)
+    await drvHandler({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: { driverId: registeredDriverId, isOnline: false }
+    }, createMockRes());
+
+    // Step d: Complete the trip
+    const completeRes = createMockRes();
+    await bkgHandler({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: { action: 'complete', bookingId: testBkgId }
+    }, completeRes);
+
+    // Step e: Re-fetch driver from database
+    const verifyDriverRes = createMockRes();
+    await drvHandler({ method: 'GET', url: `/api/drivers?id=${registeredDriverId}`, headers: {} }, verifyDriverRes);
+    const d = verifyDriverRes.body?.driver;
+
+    if (d?.isOnline === false && d?.currentWorkStatus === 'offline') {
+      console.log(`[PASS] 24. Offline Persistence: Driver who chose Offline remains strictly OFFLINE after trip completion.`);
+      passed++;
+    } else {
+      throw new Error(`Driver was incorrectly brought online! isOnline=${d?.isOnline}, currentWorkStatus=${d?.currentWorkStatus}`);
+    }
+  } catch (err) {
+    console.error(`[FAIL] 24. Offline persistence after trip completion check failed:`, err.message || err);
+    failed++;
+  }
+
   // Cleanup scratch
   if (fs.existsSync('scratch')) {
     fs.rmSync('scratch', { recursive: true, force: true });

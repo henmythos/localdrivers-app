@@ -182,10 +182,32 @@ export default async function handler(req: any, res: any) {
         const startTimeStr = String(booking.trip_start_time || booking.created_at || nowIso);
         const startTimeMs = new Date(startTimeStr).getTime();
         const endTimeMs = new Date(nowIso).getTime();
-        const durationMinutes = Math.max(1, Math.round((endTimeMs - startTimeMs) / 60000));
+        const elapsedSeconds = Math.max(0, Math.floor((endTimeMs - startTimeMs) / 1000));
+        const durationMinutes = Math.max(1, Math.round(elapsedSeconds / 60));
+        const totalHoursExact = elapsedSeconds / 3600;
+        const daysElapsed = Math.floor(elapsedSeconds / 86400);
 
+        // Billing calculation adhering to configured pricing policy
         const estimatedFare = Number(booking.estimated_fare) || 299;
-        const finalFare = Math.max(estimatedFare, estimatedFare);
+        const serviceTitle = String(booking.service_title || 'City Driver');
+        const baseHourlyRate = estimatedFare > 2000 ? 250 : 200;
+        const minimumHours = serviceTitle === 'Outstation Driver' ? 12 : 2;
+        const billableHours = Math.max(minimumHours, Math.ceil(totalHoursExact));
+
+        let finalFare = estimatedFare;
+        if (daysElapsed >= 1) {
+          const dailyRate = serviceTitle === 'Outstation Driver' ? 2200 : 2000;
+          const dailyBase = daysElapsed * dailyRate;
+          const remainingHours = Math.max(0, billableHours - daysElapsed * 24);
+          let timeCharge = dailyBase + (remainingHours * baseHourlyRate);
+          if (daysElapsed >= 2) {
+            timeCharge = Math.round(timeCharge * 0.9); // 10% multi-day discount
+          }
+          finalFare = Math.max(estimatedFare, timeCharge);
+        } else if (billableHours > minimumHours) {
+          const calculatedCharge = billableHours * baseHourlyRate;
+          finalFare = Math.max(estimatedFare, calculatedCharge);
+        }
 
         await db.execute({
           sql: `
@@ -202,6 +224,9 @@ export default async function handler(req: any, res: any) {
           args: [nowIso, durationMinutes, finalFare, endLat, endLon, bookingId],
         });
 
+        // Driver availability restoration:
+        // A driver who was Offline before or during the trip remains Offline after completion.
+        // A driver who was Online returns to availability ONLY IF no conflicting booking exists.
         const driverRes = await db.execute({
           sql: `SELECT id, is_online, status, is_hold FROM drivers WHERE id = ?`,
           args: [bkgDriverId],
@@ -212,16 +237,31 @@ export default async function handler(req: any, res: any) {
           driverIsOnline = Boolean(driverRes.rows[0].is_online);
         }
 
+        // Check for conflicting or upcoming assigned bookings
+        const nextBkgRes = await db.execute({
+          sql: `SELECT id FROM bookings WHERE driver_id = ? AND status IN ('Assigned', 'In Progress', 'Pending') AND id != ? LIMIT 1`,
+          args: [bkgDriverId, bookingId],
+        });
+
+        let nextWorkStatus = 'offline';
+        let nextActiveBookingId: string | null = null;
+        if (nextBkgRes.rows.length > 0) {
+          nextWorkStatus = 'assigned';
+          nextActiveBookingId = String(nextBkgRes.rows[0].id);
+        } else if (driverIsOnline) {
+          nextWorkStatus = 'available';
+        }
+
         await db.execute({
           sql: `
             UPDATE drivers 
-            SET current_work_status = 'available',
-                active_booking_id = NULL,
+            SET current_work_status = ?,
+                active_booking_id = ?,
                 total_trips = total_trips + 1,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?;
           `,
-          args: [bkgDriverId],
+          args: [nextWorkStatus, nextActiveBookingId, bkgDriverId],
         });
 
         return res.status(200).json({
@@ -230,9 +270,62 @@ export default async function handler(req: any, res: any) {
           status: 'Completed',
           tripDurationMinutes: durationMinutes,
           finalFare,
-          driverWorkStatus: 'available',
+          driverWorkStatus: nextWorkStatus,
           driverIsOnline,
           message: 'Trip completed. Active-job restriction released.',
+        });
+      }
+
+      // 3. ACTION: CANCEL BOOKING
+      if (action === 'cancel' || action === 'cancel_booking') {
+        const { bookingId } = body;
+        if (!bookingId) {
+          return res.status(400).json({ success: false, error: 'bookingId is required.' });
+        }
+
+        const bkgRes = await db.execute({
+          sql: `SELECT * FROM bookings WHERE id = ?`,
+          args: [bookingId],
+        });
+
+        if (bkgRes.rows.length === 0) {
+          return res.status(404).json({ success: false, error: 'Booking not found.' });
+        }
+
+        const booking = bkgRes.rows[0];
+        const bkgDriverId = String(booking.driver_id);
+
+        await db.execute({
+          sql: `UPDATE bookings SET status = 'Cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
+          args: [bookingId],
+        });
+
+        // Release driver assignment if this was their active booking
+        const driverRes = await db.execute({
+          sql: `SELECT id, is_online, active_booking_id FROM drivers WHERE id = ?`,
+          args: [bkgDriverId],
+        });
+
+        let driverIsOnline = false;
+        let activeBkgId = null;
+        if (driverRes.rows.length > 0) {
+          driverIsOnline = Boolean(driverRes.rows[0].is_online);
+          activeBkgId = driverRes.rows[0].active_booking_id;
+        }
+
+        if (activeBkgId === bookingId) {
+          const targetStatus = driverIsOnline ? 'available' : 'offline';
+          await db.execute({
+            sql: `UPDATE drivers SET current_work_status = ?, active_booking_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
+            args: [targetStatus, bkgDriverId],
+          });
+        }
+
+        return res.status(200).json({
+          success: true,
+          bookingId,
+          status: 'Cancelled',
+          message: 'Booking cancelled successfully. Driver released.',
         });
       }
 
