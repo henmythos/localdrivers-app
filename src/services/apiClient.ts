@@ -118,6 +118,7 @@ export async function apiRequest<T = any>(
 
     return {
       success: false,
+      data: (parsedBody && typeof parsedBody === 'object') ? (parsedBody as T) : undefined,
       error: userMessage,
       errorCode: parsedBody?.code || `HTTP_${res.status}`,
       requestId: parsedBody?.requestId || requestId,

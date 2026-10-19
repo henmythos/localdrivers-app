@@ -5,7 +5,7 @@ export default async function handler(req: any, res: any) {
   const reqId = `drv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-auth');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('x-request-id', reqId);
 
@@ -121,13 +121,12 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  // GET: Public & Admin Driver Query
+  // GET: Public Customer Discovery & Driver Profile Query (Zero KYC Document Leakage)
   if (req.method === 'GET') {
     try {
       const url = new URL(req.url, 'http://localhost');
       const statusParam = url.searchParams.get('status') || req.query?.status;
       const idParam = url.searchParams.get('id') || req.query?.id;
-      const isAdmin = verifyAdminAuth(req);
 
       let sql = `
         SELECT 
@@ -165,33 +164,6 @@ export default async function handler(req: any, res: any) {
         });
       }
 
-      // Fetch documents ONLY for authenticated administrators
-      let docsByDriverId = new Map<string, any[]>();
-      if (isAdmin) {
-        try {
-          let docsSql = `SELECT id, driver_id, type, status, url, uploaded_at FROM driver_documents`;
-          const docsArgs: any[] = [];
-          if (idParam) {
-            docsSql += ` WHERE driver_id = ?`;
-            docsArgs.push(idParam);
-          }
-          const docsRes = await db.execute({ sql: docsSql, args: docsArgs });
-          for (const d of docsRes.rows) {
-            const driverId = String(d.driver_id);
-            if (!docsByDriverId.has(driverId)) docsByDriverId.set(driverId, []);
-            docsByDriverId.get(driverId)!.push({
-              id: String(d.id),
-              type: d.type,
-              status: d.status,
-              url: d.url,
-              uploadedAt: d.uploaded_at,
-            });
-          }
-        } catch (docErr: any) {
-          console.warn(`[Docs fetch warning in drivers/index.ts]`, docErr.message);
-        }
-      }
-
       const drivers = [];
 
       for (const row of driversRes.rows) {
@@ -211,8 +183,6 @@ export default async function handler(req: any, res: any) {
           if (row.vehicle_categories) vehicleCategories = JSON.parse(String(row.vehicle_categories));
         } catch {}
 
-        const driverDocs = docsByDriverId.get(driverId) || [];
-
         drivers.push({
           id: driverId,
           driverCode: String(row.driver_code || ''),
@@ -229,7 +199,6 @@ export default async function handler(req: any, res: any) {
           status: String(row.status),
           isOnline: Boolean(row.is_online),
           isHold: Boolean(row.is_hold),
-          pendingCommissionFee: Number(row.pending_commission_fee) || 0,
           startingPrice: Number(row.starting_price) || 299,
           distanceKm: Number(row.distance_km) || 2.5,
           latitude: Number(row.latitude) || 17.4126,
@@ -241,7 +210,6 @@ export default async function handler(req: any, res: any) {
           joinedDate: String(row.joined_date || ''),
           currentWorkStatus: String(row.current_work_status || 'available'),
           activeBookingId: row.active_booking_id ? String(row.active_booking_id) : null,
-          documents: driverDocs,
         });
       }
 
@@ -249,7 +217,6 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json({
           success: true,
           driver: drivers[0],
-          drivers,
           requestId: reqId,
         });
       }

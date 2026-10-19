@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Shield, Lock, User, ArrowRight } from 'lucide-react';
+import { Shield, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
 import { authService } from '../../services/auth';
 
 export const AdminLoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -23,11 +24,18 @@ export const AdminLoginPage: React.FC = () => {
       return;
     }
 
-    const res = authService.loginAdmin(username, password);
-    if (res.success) {
-      navigate('/admin/dashboard');
-    } else {
-      setError(res.error || 'Invalid Admin User ID or Password');
+    setIsLoading(true);
+    try {
+      const res = await authService.loginAdmin(username, password);
+      if (res.success) {
+        navigate('/admin/dashboard');
+      } else {
+        setError(res.error || 'Invalid Admin User ID or Password');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Admin login connection failed.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -89,10 +97,20 @@ export const AdminLoginPage: React.FC = () => {
 
           <button
             type="submit"
-            className="w-full py-3.5 bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
+            disabled={isLoading}
+            className="w-full py-3.5 bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
           >
-            Access Admin Console
-            <ArrowRight className="w-4 h-4" />
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Verifying Credentials...
+              </>
+            ) : (
+              <>
+                Access Admin Console
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </form>
 

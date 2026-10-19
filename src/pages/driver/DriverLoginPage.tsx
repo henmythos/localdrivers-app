@@ -9,26 +9,40 @@ export const DriverLoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [statusMessage, setStatusMessage] = useState<{ type: 'pending' | 'error'; text: string } | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setStatusMessage(null);
 
-    if (!identifier.trim()) {
+    const cleanInput = identifier.trim();
+    if (!cleanInput) {
       setError('Please enter your Mobile Number (User ID)');
       return;
     }
 
     setIsLoading(true);
     try {
-      const res = await authService.loginDriver(identifier, password || identifier);
-      if (res.success) {
+      const res = await authService.loginDriver(cleanInput, password || cleanInput);
+      if (res.success && res.driver) {
         navigate('/driver/dashboard');
+      } else if (res.status === 'Pending') {
+        setStatusMessage({
+          type: 'pending',
+          text: res.error || 'Your application is currently under review by Admin. Once approved, you will be able to log in.',
+        });
       } else {
-        setError(res.error || 'Login failed');
+        setStatusMessage({
+          type: 'error',
+          text: res.error || 'Invalid credentials or login failed. Please retry.',
+        });
       }
     } catch (err: any) {
-      setError(err.message || 'Login connection failed.');
+      setStatusMessage({
+        type: 'error',
+        text: err.message || 'Login connection failed. Please check your internet connection.',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -57,6 +71,22 @@ export const DriverLoginPage: React.FC = () => {
             <span>Use your registered 10-digit Mobile Number as User ID and Password.</span>
           </div>
         </div>
+
+        {statusMessage && statusMessage.type === 'pending' && (
+          <div className="p-4 bg-amber-50 text-amber-900 text-xs font-semibold rounded-2xl border border-amber-300 flex items-start gap-3 animate-in fade-in">
+            <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="block text-amber-950 font-black mb-0.5">Verification Review in Progress</strong>
+              <span>{statusMessage.text}</span>
+            </div>
+          </div>
+        )}
+
+        {statusMessage && statusMessage.type === 'error' && (
+          <div className="p-3.5 bg-red-50 text-red-700 text-xs font-bold rounded-xl border border-red-200 animate-in fade-in">
+            {statusMessage.text}
+          </div>
+        )}
 
         {error && (
           <div className="p-3.5 bg-red-50 text-red-700 text-xs font-bold rounded-xl border border-red-200">

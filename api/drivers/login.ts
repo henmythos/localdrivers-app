@@ -26,7 +26,7 @@ export default async function handler(req: any, res: any) {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
     const { identifier = '', password = '' } = body;
 
-    const cleanInput = identifier.trim();
+    const cleanInput = (identifier || '').toString().trim();
     const cleanDigits = cleanInput.replace(/\D/g, '');
 
     if (!cleanInput) {
@@ -90,8 +90,16 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // If driver is Approved, verify password
-    if (row.status === 'Approved' && password) {
+    // For Approved drivers, verify password
+    if (row.status === 'Approved') {
+      if (!password || !password.toString().trim()) {
+        return res.status(401).json({
+          success: false,
+          error: 'Password is required to sign in. Default is your 10-digit mobile number.',
+          requestId: reqId,
+        });
+      }
+
       let isPasswordValid = false;
 
       if (row.password_hash && row.salt) {
@@ -100,7 +108,7 @@ export default async function handler(req: any, res: any) {
 
       // Check initial mobile digits credentials fallback
       if (!isPasswordValid) {
-        const cleanPassDigits = password.replace(/\D/g, '');
+        const cleanPassDigits = password.toString().replace(/\D/g, '');
         const driverPhoneDigits = (row.phone || '').replace(/\D/g, '');
 
         if (
@@ -112,11 +120,15 @@ export default async function handler(req: any, res: any) {
           isPasswordValid = true;
 
           // Upgrade hash to strong scrypt
-          const updated = hashPassword(password);
-          await db.execute({
-            sql: `UPDATE drivers SET password_hash = ?, salt = ? WHERE id = ?;`,
-            args: [updated.hash, updated.salt, row.id]
-          });
+          try {
+            const updated = hashPassword(password);
+            await db.execute({
+              sql: `UPDATE drivers SET password_hash = ?, salt = ? WHERE id = ?;`,
+              args: [updated.hash, updated.salt, row.id]
+            });
+          } catch (hashErr: any) {
+            console.warn(`[Login hash upgrade note]`, hashErr.message);
+          }
         }
       }
 
@@ -145,18 +157,23 @@ export default async function handler(req: any, res: any) {
       if (row.vehicle_categories) vehicleCategories = JSON.parse(String(row.vehicle_categories));
     } catch {}
 
-    const docsRes = await db.execute({
-      sql: `SELECT id, type, status, url, uploaded_at FROM driver_documents WHERE driver_id = ?;`,
-      args: [row.id]
-    });
+    // Driver verification statuses without sensitive document URLs or base64 data
+    let documents: Array<{ id: string; type: string; status: string; uploadedAt?: string }> = [];
+    try {
+      const docsRes = await db.execute({
+        sql: `SELECT id, type, status, uploaded_at FROM driver_documents WHERE driver_id = ?;`,
+        args: [row.id]
+      });
 
-    const documents = docsRes.rows.map((d: any) => ({
-      id: String(d.id),
-      type: d.type,
-      status: d.status,
-      url: d.url,
-      uploadedAt: d.uploaded_at,
-    }));
+      documents = docsRes.rows.map((d: any) => ({
+        id: String(d.id),
+        type: String(d.type),
+        status: String(d.status),
+        uploadedAt: d.uploaded_at ? String(d.uploaded_at) : undefined,
+      }));
+    } catch (docErr: any) {
+      console.warn(`[Login docs metadata query note]`, docErr.message);
+    }
 
     const driverProfile = {
       id: String(row.id),

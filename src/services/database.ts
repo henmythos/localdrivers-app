@@ -358,9 +358,23 @@ class DatabaseService {
     const index = drivers.findIndex(d => d.id === id);
     if (index !== -1) {
       drivers[index] = { ...drivers[index], ...updates };
-      localStorage.setItem(this.driversKey, JSON.stringify(drivers));
+      try {
+        localStorage.setItem(this.driversKey, JSON.stringify(drivers));
+      } catch (err: any) {
+        console.warn('[DatabaseService] updateDriver quota notice:', err.message);
+      }
       this.notify();
       return drivers[index];
+    } else if (updates.name) {
+      const newDriver = { id, ...updates } as Driver;
+      drivers.unshift(newDriver);
+      try {
+        localStorage.setItem(this.driversKey, JSON.stringify(drivers));
+      } catch (err: any) {
+        console.warn('[DatabaseService] upsertDriver quota notice:', err.message);
+      }
+      this.notify();
+      return newDriver;
     }
     return undefined;
   }

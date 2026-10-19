@@ -83,7 +83,9 @@ export const driversService = {
     const authState = authService.getAuthState();
     const isAdmin = authState.isAdminAuthenticated;
 
-    const endpoint = `/api/drivers?id=${encodeURIComponent(id)}`;
+    const endpoint = isAdmin
+      ? `/api/admin/all-drivers?id=${encodeURIComponent(id)}`
+      : `/api/drivers?id=${encodeURIComponent(id)}`;
     const headers = isAdmin ? authService.getAdminAuthHeaders() : undefined;
 
     const res = await apiClient.get<{ driver?: Driver; drivers?: Driver[] }>(endpoint, {
