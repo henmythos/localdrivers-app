@@ -24,9 +24,8 @@ export default async function handler(req: any, res: any) {
   try {
     const db = await initDb();
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-    const { identifier = '', password = '' } = body;
-
-    const cleanInput = (identifier || '').toString().trim();
+    const { identifier = '', phone = '', email = '', username = '', password = '' } = body;
+    const cleanInput = (identifier || phone || email || username || '').toString().trim();
     const cleanDigits = cleanInput.replace(/\D/g, '');
 
     if (!cleanInput) {
