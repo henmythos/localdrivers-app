@@ -42,9 +42,10 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    const cleanCode = String(driverId).replace(/^#/, '');
     const driverCheck = await db.execute({
-      sql: `SELECT id, name FROM drivers WHERE id = ?;`,
-      args: [driverId]
+      sql: `SELECT id, name FROM drivers WHERE id = ? OR driver_code = ? OR driver_code = ?;`,
+      args: [driverId, driverId, cleanCode]
     });
 
     if (driverCheck.rows.length === 0) {
@@ -55,7 +56,9 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    const driverName = driverCheck.rows[0].name;
+    const driverRow = driverCheck.rows[0];
+    const canonicalDriverId = String(driverRow.id);
+    const driverName = driverRow.name;
 
     const reviewedBy = process.env.ADMIN_USERNAME?.trim() || 'Admin';
     await db.execute({
@@ -68,12 +71,12 @@ export default async function handler(req: any, res: any) {
         reviewed_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?;`,
-      args: [reason, reviewedBy, driverId]
+      args: [reason, reviewedBy, canonicalDriverId]
     });
 
     await db.execute({
       sql: `UPDATE driver_documents SET status = 'Rejected' WHERE driver_id = ?;`,
-      args: [driverId]
+      args: [canonicalDriverId]
     });
 
     return res.status(200).json({

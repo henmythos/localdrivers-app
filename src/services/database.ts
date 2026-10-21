@@ -147,23 +147,16 @@ class DatabaseService {
         if (b.status === 'Pending') {
           const assignedTime = new Date(b.assignedAt || b.createdAt).getTime();
           const elapsed = (now - assignedTime) / 1000;
-          if (elapsed >= 20) {
+          if (elapsed >= 60) {
             this.reassignBookingToNextDriver(b.id);
           }
         }
       });
-    }, 2000);
+    }, 5000);
   }
 
   private initDatabase() {
-    const versionKey = 'localdrivers_db_v7_production_clean';
-    if (!localStorage.getItem(versionKey)) {
-      localStorage.removeItem(this.driversKey);
-      localStorage.removeItem(this.bookingsKey);
-      localStorage.removeItem(this.reviewsKey);
-      localStorage.setItem(versionKey, 'true');
-    }
-
+    // PRESERVE ALL DATA: Never destructively remove user storage keys across commits or rebuilds
     if (!localStorage.getItem(this.driversKey)) {
       localStorage.setItem(this.driversKey, JSON.stringify(INITIAL_DRIVERS));
     }
@@ -353,9 +346,46 @@ class DatabaseService {
     return newDriver;
   }
 
+  // Upsert driver safely into local cache without losing data
+  public upsertDriver(driver: Driver, notifySubscribers = false): Driver {
+    const drivers = this.getDrivers();
+    const cleanId = (driver.id || '').trim();
+    const cleanCode = (driver.driverCode || '').trim().toUpperCase();
+    const index = drivers.findIndex(d => 
+      (cleanId && d.id === cleanId) || 
+      (cleanCode && d.driverCode && d.driverCode.toUpperCase() === cleanCode)
+    );
+    let changed = false;
+    if (index !== -1) {
+      if (JSON.stringify(drivers[index]) !== JSON.stringify(driver)) {
+        drivers[index] = { ...drivers[index], ...driver };
+        changed = true;
+      }
+    } else {
+      drivers.unshift(driver);
+      changed = true;
+    }
+    if (changed) {
+      try {
+        localStorage.setItem(this.driversKey, JSON.stringify(drivers));
+      } catch (err: any) {
+        console.warn('[DatabaseService] upsertDriver quota notice:', err.message);
+      }
+      if (notifySubscribers) {
+        this.notify();
+      }
+    }
+    return driver;
+  }
+
   public updateDriver(id: string, updates: Partial<Driver>): Driver | undefined {
     const drivers = this.getDrivers();
-    const index = drivers.findIndex(d => d.id === id);
+    const cleanId = (id || '').trim();
+    const cleanCode = cleanId.replace(/^#/, '').toUpperCase();
+    const index = drivers.findIndex(d => 
+      d.id === cleanId || 
+      (d.driverCode && d.driverCode.toUpperCase() === cleanCode)
+    );
     if (index !== -1) {
       drivers[index] = { ...drivers[index], ...updates };
       try {

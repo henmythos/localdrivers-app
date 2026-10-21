@@ -51,6 +51,11 @@ export const driversService = {
     });
 
     if (res.success && res.data && Array.isArray(res.data.drivers)) {
+      for (const d of res.data.drivers) {
+        try {
+          dbService.upsertDriver(d, false);
+        } catch {}
+      }
       return res.data.drivers;
     }
 
@@ -68,7 +73,7 @@ export const driversService = {
       // Synchronize into local storage cache
       for (const d of res.data.drivers) {
         try {
-          dbService.updateDriver(d.id, d);
+          dbService.upsertDriver(d, false);
         } catch {}
       }
       return res.data.drivers;
@@ -97,7 +102,7 @@ export const driversService = {
       const driver = res.data.driver || (Array.isArray(res.data.drivers) ? res.data.drivers[0] : null);
       if (driver) {
         try {
-          dbService.updateDriver(driver.id, driver);
+          dbService.upsertDriver(driver, false);
         } catch {}
         return driver;
       }
@@ -171,7 +176,19 @@ export const driversService = {
     if (res.success && res.data?.success) {
       // Synchronize with local storage only after backend confirmation
       try {
-        dbService.registerDriver(input);
+        dbService.upsertDriver({
+          ...input,
+          id: res.data.driverId || `drv-${Date.now()}`,
+          driverCode: res.data.driverCode || 'ABC123',
+          status: 'Pending',
+          isOnline: false,
+          isHold: false,
+          pendingCommissionFee: 0,
+          verificationBadge: false,
+          rating: 5.0,
+          totalTrips: 0,
+          joinedDate: new Date().toISOString().split('T')[0],
+        }, true);
       } catch (syncErr: any) {
         console.warn('[Drivers Service] Local storage sync note:', syncErr.message);
       }

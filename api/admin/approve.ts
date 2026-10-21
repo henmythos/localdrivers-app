@@ -43,9 +43,10 @@ export default async function handler(req: any, res: any) {
     }
 
     // Check if driver exists
+    const cleanCode = String(driverId).replace(/^#/, '');
     const driverCheck = await db.execute({
-      sql: `SELECT id, name, status FROM drivers WHERE id = ?;`,
-      args: [driverId]
+      sql: `SELECT id, name, status FROM drivers WHERE id = ? OR driver_code = ? OR driver_code = ?;`,
+      args: [driverId, driverId, cleanCode]
     });
 
     if (driverCheck.rows.length === 0) {
@@ -56,19 +57,21 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    const driverName = driverCheck.rows[0].name;
+    const driverRow = driverCheck.rows[0];
+    const canonicalDriverId = String(driverRow.id);
+    const driverName = driverRow.name;
 
     // 1. ACTION: HOLD / UNHOLD
     if (action === 'hold') {
       const holdVal = isHold ? 1 : 0;
       await db.execute({
         sql: `UPDATE drivers SET is_hold = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
-        args: [holdVal, driverId],
+        args: [holdVal, canonicalDriverId],
       });
 
       return res.status(200).json({
         success: true,
-        driverId,
+        driverId: canonicalDriverId,
         isHold: Boolean(holdVal),
         message: holdVal ? `Driver ${driverName} placed on hold.` : `Driver ${driverName} removed from hold.`,
         requestId: reqId,
@@ -88,7 +91,7 @@ export default async function handler(req: any, res: any) {
         reviewed_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?;`,
-      args: [reviewedBy, driverId]
+      args: [reviewedBy, canonicalDriverId]
     });
 
     // Mark all documents as verified
@@ -96,7 +99,7 @@ export default async function handler(req: any, res: any) {
       sql: `UPDATE driver_documents SET
         status = 'Verified'
       WHERE driver_id = ?;`,
-      args: [driverId]
+      args: [canonicalDriverId]
     });
 
     return res.status(200).json({
