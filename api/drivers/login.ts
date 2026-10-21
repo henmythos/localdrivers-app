@@ -113,8 +113,7 @@ export default async function handler(req: any, res: any) {
         if (
           (cleanPassDigits.length >= 10 && driverPhoneDigits.includes(cleanPassDigits)) ||
           password === row.phone ||
-          password === row.email ||
-          password === '123456'
+          password === row.email
         ) {
           isPasswordValid = true;
 

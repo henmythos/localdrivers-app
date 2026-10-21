@@ -442,38 +442,57 @@ export default async function handler(req: any, res: any) {
         });
       }
 
-      // Insert booking into database
+      // Insert booking into database with automatic rollback if insert fails
       const dataJson = JSON.stringify(otherDetails || {});
-      await db.execute({
-        sql: `
-          INSERT INTO bookings (
-            id, customer_name, customer_phone, driver_id, driver_name,
-            driver_phone, driver_photo, driver_code, service_title,
-            status, pickup_location, destination_location, date, time,
-            notes, estimated_fare, idempotency_key, data_json,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-        `,
-        args: [
-          bookingId,
-          customerName || 'Customer',
-          customerPhone,
-          driverId,
-          String(driverRow.name),
-          String(driverRow.phone),
-          String(driverRow.photo || ''),
-          String(driverRow.driver_code || ''),
-          serviceTitle || 'City Driver',
-          pickupLocation,
-          destinationLocation || '',
-          date || '',
-          time || '',
-          notes || '',
-          Number(estimatedFare) || 299,
-          idempotencyKey || bookingId,
-          dataJson,
-        ],
-      });
+      try {
+        await db.execute({
+          sql: `
+            INSERT INTO bookings (
+              id, customer_name, customer_phone, driver_id, driver_name,
+              driver_phone, driver_photo, driver_code, service_title,
+              status, pickup_location, destination_location, date, time,
+              notes, estimated_fare, idempotency_key, data_json,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+          `,
+          args: [
+            bookingId,
+            customerName || 'Customer',
+            customerPhone,
+            driverId,
+            String(driverRow.name),
+            String(driverRow.phone),
+            String(driverRow.photo || ''),
+            String(driverRow.driver_code || ''),
+            serviceTitle || 'City Driver',
+            pickupLocation,
+            destinationLocation || '',
+            date || '',
+            time || '',
+            notes || '',
+            Number(estimatedFare) || 299,
+            idempotencyKey || bookingId,
+            dataJson,
+          ],
+        });
+      } catch (insertErr: any) {
+        // Roll back driver reservation so driver is not stranded in 'assigned'
+        try {
+          await db.execute({
+            sql: `
+              UPDATE drivers 
+              SET current_work_status = 'available',
+                  active_booking_id = NULL,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ? AND active_booking_id = ?;
+            `,
+            args: [driverId, bookingId],
+          });
+        } catch (rollbackErr: any) {
+          console.error(`[DB Rollback Failed] Driver ${driverId} rollback for failed booking ${bookingId}:`, rollbackErr.message);
+        }
+        throw insertErr;
+      }
 
       const newBooking = {
         id: bookingId,

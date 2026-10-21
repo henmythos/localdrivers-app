@@ -8,8 +8,8 @@ let isInitialized = false;
 
 export function getTursoUrl(): string {
   return (
-    process.env.TURSO_DATABASE_URL?.trim() ||
     process.env.LOCALDRIVERS_TURSO_DATABASE_URL?.trim() ||
+    process.env.TURSO_DATABASE_URL?.trim() ||
     process.env.VITE_TURSO_DATABASE_URL?.trim() ||
     ''
   );
@@ -17,8 +17,8 @@ export function getTursoUrl(): string {
 
 export function getTursoToken(): string {
   return (
-    process.env.TURSO_AUTH_TOKEN?.trim() ||
     process.env.LOCALDRIVERS_TURSO_AUTH_TOKEN?.trim() ||
+    process.env.TURSO_AUTH_TOKEN?.trim() ||
     process.env.VITE_TURSO_AUTH_TOKEN?.trim() ||
     ''
   );
@@ -27,13 +27,15 @@ export function getTursoToken(): string {
 /**
  * Returns a libSQL client instance.
  * Prefers pure-web client for remote Turso HTTP/libSQL endpoints (no native bindings required).
- * Falls back to local SQLite file for local development.
+ * Strictly fails closed on Vercel serverless to prevent data loss in ephemeral container storage.
+ * Falls back to local SQLite file only during local development.
  */
 export function getDb(): Client {
   if (dbClient) return dbClient;
 
   const rawUrl = getTursoUrl();
   const rawToken = getTursoToken();
+  const isVercel = !!process.env.VERCEL;
 
   // If remote Turso URL is provided and valid, use pure-web client (zero native bindings)
   if (rawUrl && (rawUrl.startsWith('libsql://') || rawUrl.startsWith('https://'))) {
@@ -44,13 +46,23 @@ export function getDb(): Client {
       }) as unknown as Client;
       return dbClient;
     } catch (err: any) {
-      console.warn(`[DB] Failed to create remote Turso client: ${err.message}.`);
+      console.error(`[DB] Failed to create remote Turso client: ${err.message}.`);
+      if (isVercel) {
+        throw new Error(`[DB Remote Connection Failed] Could not initialize remote Turso client: ${err.message}`);
+      }
     }
   }
 
-  // Local SQLite file fallback
-  const isVercel = !!process.env.VERCEL;
-  const dbDir = isVercel ? '/tmp' : process.cwd();
+  // On Vercel, ephemeral /tmp storage must NEVER silently absorb production data
+  if (isVercel) {
+    throw new Error(
+      `[DB Configuration Error] Remote Turso database is not accessible or unconfigured on Vercel serverless. ` +
+      `Ephemeral /tmp database fallback is strictly disabled in production to protect data integrity.`
+    );
+  }
+
+  // Local development SQLite file fallback (only when NOT on Vercel)
+  const dbDir = process.cwd();
   const dbPath = path.join(dbDir, 'localdrivers.db');
   const fileUrl = `file:${dbPath}`;
 

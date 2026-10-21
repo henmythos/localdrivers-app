@@ -149,11 +149,15 @@ export default async function handler(req: any, res: any) {
       if (!docsByDriverId.has(driverId)) {
         docsByDriverId.set(driverId, []);
       }
+      // In summary list view, do not serialize full multi-megabyte base64 blobs across network
+      const rawUrl = String(d.url || '');
+      const docUrl = idParam ? rawUrl : (rawUrl.startsWith('data:') ? '[DOCUMENT_STORED_IN_DB]' : rawUrl);
+
       docsByDriverId.get(driverId)!.push({
         id: String(d.id),
         type: d.type,
         status: d.status,
-        url: d.url,
+        url: docUrl,
         uploadedAt: d.uploaded_at,
       });
     }

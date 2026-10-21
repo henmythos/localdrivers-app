@@ -46,11 +46,14 @@ export default async function handler(req: any, res: any) {
       ORDER BY created_at DESC;
     `);
 
-    // Fetch all documents for pending drivers in one query (prevents N+1 query problem)
-    const docsRes = await db.execute(`
-      SELECT id, driver_id, type, status, url, uploaded_at 
-      FROM driver_documents;
-    `);
+    // Fetch documents only for pending drivers (prevents full table scans and memory exhaustion)
+    const docsRes = driversRes.rows.length > 0 
+      ? await db.execute(`
+          SELECT id, driver_id, type, status, url, uploaded_at 
+          FROM driver_documents
+          WHERE driver_id IN (SELECT id FROM drivers WHERE status = 'Pending');
+        `)
+      : { rows: [] };
 
     const docsByDriverId = new Map<string, any[]>();
     for (const d of docsRes.rows) {
