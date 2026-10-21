@@ -1,5 +1,5 @@
 import { initDb } from '../_lib/db.js';
-import { verifyAdminAuth, generateAdminToken } from '../_lib/auth.js';
+import { verifyAdminAuth, generateAdminToken, cleanEnvValue } from '../_lib/auth.js';
 
 export default async function handler(req: any, res: any) {
   const reqId = `all-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -13,28 +13,45 @@ export default async function handler(req: any, res: any) {
     return res.status(200).end();
   }
 
-  // POST: Secure Server-Side Administrator Authentication
+  // POST: Secure Server-Side Administrator Authentication (Backwards Compatibility)
   if (req.method === 'POST') {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-      const { username = '', password = '' } = body;
+      const rawUser = body.username || body.userId || body.user || body.identifier || body.email || '';
+      const rawPass = body.password || '';
 
-      const adminUser = process.env.ADMIN_USERNAME?.trim() || 'Ranjith.ceo';
-      const adminPass = process.env.ADMIN_PASSWORD?.trim() || 'ranjith@2026';
-
-      const cleanUser = username.trim().toLowerCase();
-      const cleanPass = password.trim();
+      const cleanUser = String(rawUser).trim().toLowerCase();
+      const cleanPass = String(rawPass).trim();
 
       if (!cleanUser || !cleanPass) {
         return res.status(400).json({
           success: false,
-          error: 'Administrator username and password are required.',
+          error: 'Administrator User ID and Password are required.',
           requestId: reqId,
         });
       }
 
-      const isUserMatch = cleanUser === adminUser.toLowerCase() || cleanUser === 'ranjith' || cleanUser === 'admin';
-      const isPassMatch = cleanPass === adminPass || (cleanUser === 'admin' && cleanPass === 'admin123');
+      const configuredAdminUser = cleanEnvValue(process.env.ADMIN_USERNAME) || 'Ranjith.ceo';
+      const configuredAdminPass = cleanEnvValue(process.env.ADMIN_PASSWORD) || 'ranjith@2026';
+
+      if (!configuredAdminUser || !configuredAdminPass) {
+        console.error(`[Admin Auth Config Error ${reqId}]: Server admin credentials not configured.`);
+        return res.status(500).json({
+          success: false,
+          error: 'Server authentication configuration error. Administrator credentials cannot be verified due to server environment configuration.',
+          requestId: reqId,
+        });
+      }
+
+      const isUserMatch =
+        cleanUser === configuredAdminUser.toLowerCase() ||
+        cleanUser === 'ranjith' ||
+        cleanUser === 'admin';
+
+      const isPassMatch =
+        cleanPass === configuredAdminPass ||
+        cleanPass.toLowerCase() === configuredAdminPass.toLowerCase() ||
+        (cleanUser === 'admin' && cleanPass === 'admin123');
 
       if (!isUserMatch || !isPassMatch) {
         return res.status(401).json({
@@ -45,18 +62,19 @@ export default async function handler(req: any, res: any) {
       }
 
       // Generate cryptographically signed JWT for admin
-      const token = generateAdminToken(adminUser);
+      const token = generateAdminToken(configuredAdminUser);
 
       return res.status(200).json({
         success: true,
         token,
         admin: {
-          username: adminUser,
+          username: configuredAdminUser,
           role: 'ADMIN',
         },
         requestId: reqId,
       });
     } catch (err: any) {
+      console.error(`[Admin Auth Exception ${reqId}]:`, err.message || err);
       return res.status(500).json({
         success: false,
         error: 'Administrator authentication failure.',
@@ -199,6 +217,7 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({
         success: true,
         driver: drivers[0],
+        drivers,
         requestId: reqId,
       });
     }

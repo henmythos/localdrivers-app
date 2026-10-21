@@ -141,11 +141,21 @@ export const authService = {
       return { success: false, error: 'User ID and Password are required' };
     }
 
-    const res = await apiClient.post<{ success: boolean; token?: string; error?: string }>(
-      '/api/admin/all-drivers',
+    // Attempt dedicated admin login endpoint first
+    let res = await apiClient.post<{ success: boolean; token?: string; error?: string }>(
+      '/api/admin/login',
       { username: cleanUser, password: cleanPass },
       { fallbackErrorMessage: 'Administrator authentication service temporarily unavailable.' }
     );
+
+    // If 404 (e.g. route fallback in older serverless routing), fall back to /api/admin/all-drivers
+    if (res.status === 404) {
+      res = await apiClient.post<{ success: boolean; token?: string; error?: string }>(
+        '/api/admin/all-drivers',
+        { username: cleanUser, password: cleanPass },
+        { fallbackErrorMessage: 'Administrator authentication service temporarily unavailable.' }
+      );
+    }
 
     if (res.success && res.data?.token) {
       localStorage.setItem(ADMIN_AUTH_KEY, 'true');
