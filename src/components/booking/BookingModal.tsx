@@ -13,6 +13,8 @@ import { RouteMap } from '../map/RouteMap';
 import { routingService, RouteResult, HYDERABAD_LANDMARKS } from '../../services/routing';
 import { gpsService } from '../../services/gps';
 import { billingService } from '../../services/billing';
+import { locationService } from '../../services/location';
+import { LocationSearchInput } from './LocationSearchInput';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 interface BookingModalProps {
@@ -67,9 +69,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [isReturnTrip, setIsReturnTrip] = useState(false);
 
   // Map Interaction State
-  const [activePinSelection, setActivePinSelection] = useState<'pickup' | 'destination' | 'none'>('none');
+  const [activePinSelection, setActivePinSelection] = useState<'pickup' | 'destination' | 'none' | string>('none');
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+  const [isGpsLocating, setIsGpsLocating] = useState(false);
 
   // Date, Time & Vehicle
   const todayStr = new Date().toISOString().split('T')[0];
@@ -95,6 +98,29 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
 
+  // Automatically detect customer location by permission on mount
+  useEffect(() => {
+    if (!('geolocation' in navigator)) return;
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(5));
+        const lng = Number(pos.coords.longitude.toFixed(5));
+        try {
+          const resolved = await locationService.reverseGeocode(lat, lng);
+          if (resolved?.address) {
+            setPickupCoords({ latitude: lat, longitude: lng });
+            setPickupLocation(resolved.address);
+          }
+        } catch {}
+      },
+      (err) => {
+        console.log('[Geolocation] Auto-detect not granted:', err.message);
+      },
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 }
+    );
+  }, []);
+
   // Auto-calculate Road Route via OSRM whenever points or return-trip setting changes
   useEffect(() => {
     let isCancelled = false;
@@ -103,10 +129,14 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       if (!pickupCoords || !destinationCoords) return;
       setIsCalculatingRoute(true);
 
+      const validStops = intermediateStops
+        .filter(s => s.latitude !== 0 && s.longitude !== 0)
+        .map(s => ({ latitude: s.latitude, longitude: s.longitude }));
+
       const res = await routingService.calculateRoadRoute(
         pickupCoords,
         destinationCoords,
-        intermediateStops.map(s => ({ latitude: s.latitude, longitude: s.longitude })),
+        validStops,
         isReturnTrip
       );
 
@@ -124,39 +154,76 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
   // Handle GPS Current Location for Pickup
   const handleUseGpsForPickup = async () => {
-    const geo = await gpsService.captureEventLocation('Manual Refresh');
-    if (geo.source === 'gps') {
-      setPickupCoords({ latitude: geo.latitude, longitude: geo.longitude });
-      setPickupLocation(geo.address || `Current Location (${geo.latitude}, ${geo.longitude})`);
-    } else {
-      alert(geo.address || 'Unable to access GPS location. Please select on the map or type your address.');
+    setIsGpsLocating(true);
+    try {
+      const geo = await gpsService.captureEventLocation('Manual Refresh');
+      if (geo.source === 'gps') {
+        const resolved = await locationService.reverseGeocode(geo.latitude, geo.longitude);
+        const resolvedAddr = resolved?.address || geo.address || `Current Location (${geo.latitude}, ${geo.longitude})`;
+        setPickupCoords({ latitude: geo.latitude, longitude: geo.longitude });
+        setPickupLocation(resolvedAddr);
+      } else {
+        alert(geo.address || 'Unable to access GPS location. Please select on the map or type your address.');
+      }
+    } finally {
+      setIsGpsLocating(false);
     }
   };
 
   // Handle Map Pin Dropping
-  const handleMapLocationSelect = (
-    type: 'pickup' | 'destination',
+  const handleMapLocationSelect = async (
+    type: string,
     coords: { latitude: number; longitude: number }
   ) => {
+    let readable = `Map Location (${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)})`;
+    try {
+      const resolved = await locationService.reverseGeocode(coords.latitude, coords.longitude);
+      if (resolved?.address) {
+        readable = resolved.address;
+      }
+    } catch {}
+
     if (type === 'pickup') {
       setPickupCoords(coords);
-      setPickupLocation(`Map Pin (${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)})`);
-    } else {
+      setPickupLocation(readable);
+    } else if (type === 'destination') {
       setDestinationCoords(coords);
-      setDestinationLocation(`Map Pin (${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)})`);
+      setDestinationLocation(readable);
+    } else if (type.startsWith('stop-')) {
+      const stopIdx = parseInt(type.replace('stop-', ''), 10);
+      setIntermediateStops(prev => {
+        const copy = [...prev];
+        if (copy[stopIdx]) {
+          copy[stopIdx] = {
+            ...copy[stopIdx],
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            address: readable,
+          };
+        }
+        return copy;
+      });
     }
     setActivePinSelection('none');
   };
 
-  // Add Intermediate Stop
+  // Intermediate Stops
   const handleAddStop = () => {
+    if (intermediateStops.length >= 4) {
+      alert('You can add up to 4 intermediate stops per journey.');
+      return;
+    }
     const newStop: TripStop = {
-      id: `stop-${Date.now()}`,
-      address: 'Cyber Towers, Hitec City',
-      latitude: 17.4504,
-      longitude: 78.3808,
+      id: `stop-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      address: '',
+      latitude: 0,
+      longitude: 0,
     };
     setIntermediateStops([...intermediateStops, newStop]);
+  };
+
+  const handleUpdateStop = (id: string, updates: Partial<TripStop>) => {
+    setIntermediateStops(prev => prev.map(s => (s.id === id ? { ...s, ...updates } : s)));
   };
 
   const handleRemoveStop = (id: string) => {
@@ -506,7 +573,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               </span>
               <h4 className="text-xl font-extrabold text-slate-900 mb-1">Route & Locations</h4>
               <p className="text-xs text-slate-500 mb-3">
-                Select pickup, destination, and intermediate stops on the road route.
+                Type address, pick popular hubs, or tap the map to position pickup, stops, and drop-off.
               </p>
 
               {/* Interactive Map */}
@@ -514,7 +581,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 <RouteMap
                   pickupCoords={pickupCoords}
                   destinationCoords={destinationCoords}
-                  intermediateStops={intermediateStops}
+                  intermediateStops={intermediateStops.filter(s => s.latitude !== 0 && s.longitude !== 0)}
                   outboundPolyline={routeResult?.outboundPolyline || []}
                   returnPolyline={routeResult?.returnPolyline || []}
                   isReturnTrip={isReturnTrip}
@@ -555,119 +622,152 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               </div>
 
               {/* Location Input Fields */}
-              <div className="space-y-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                      Pickup Address
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleUseGpsForPickup}
-                      className="text-[11px] text-brand-600 hover:underline font-bold flex items-center gap-1"
-                    >
-                      <Compass className="w-3 h-3" />
-                      Use GPS
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={pickupLocation}
-                    onChange={e => setPickupLocation(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-brand-500"
-                    placeholder="Enter pickup address"
-                  />
-                </div>
+              <div className="space-y-4">
+                {/* Pickup Address with Search Autocomplete & Auto-GPS */}
+                <LocationSearchInput
+                  label="Pickup Address"
+                  value={pickupLocation}
+                  onChange={setPickupLocation}
+                  onSelectLocation={point => {
+                    setPickupCoords({ latitude: point.latitude, longitude: point.longitude });
+                    setPickupLocation(point.address);
+                  }}
+                  onUseGps={handleUseGpsForPickup}
+                  isGpsLoading={isGpsLocating}
+                  onToggleMapPin={() => setActivePinSelection(activePinSelection === 'pickup' ? 'none' : 'pickup')}
+                  isSettingOnMap={activePinSelection === 'pickup'}
+                  dotColor="emerald"
+                  showQuickPicks={true}
+                  placeholder="Search pickup area, landmark or street..."
+                />
 
-                <div>
-                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-1">
-                    <span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span>
-                    Destination Address
-                  </label>
-                  <input
-                    type="text"
-                    value={destinationLocation}
-                    onChange={e => setDestinationLocation(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:ring-2 focus:ring-brand-500"
-                    placeholder="Enter destination address"
-                  />
-                </div>
-
-                {/* Intermediate Stops */}
+                {/* Intermediate Stops (Waypoints) */}
                 {intermediateStops.map((stop, idx) => (
-                  <div key={stop.id} className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
-                      <span className="text-xs font-bold text-amber-900">Stop {idx + 1}:</span>
-                      <span className="text-xs text-amber-800 truncate">{stop.address}</span>
+                  <div
+                    key={stop.id}
+                    className="p-3 bg-amber-50/70 rounded-2xl border border-amber-200/90 space-y-2 relative"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                        Stop {idx + 1} (Waypoint)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveStop(stop.id)}
+                        className="text-amber-700 hover:text-red-600 p-1 rounded-lg hover:bg-amber-100 transition-colors flex items-center gap-1 text-[11px] font-bold"
+                        title="Remove Stop"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remove</span>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveStop(stop.id)}
-                      className="text-amber-700 hover:text-red-600 p-1"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+
+                    <LocationSearchInput
+                      label={`Stop ${idx + 1} Address`}
+                      value={stop.address}
+                      onChange={val => handleUpdateStop(stop.id, { address: val })}
+                      onSelectLocation={point => {
+                        handleUpdateStop(stop.id, {
+                          address: point.address,
+                          latitude: point.latitude,
+                          longitude: point.longitude,
+                        });
+                      }}
+                      onToggleMapPin={() =>
+                        setActivePinSelection(activePinSelection === `stop-${idx}` ? 'none' : `stop-${idx}`)
+                      }
+                      isSettingOnMap={activePinSelection === `stop-${idx}`}
+                      dotColor="amber"
+                      placeholder="Type stop address, landmark or area..."
+                    />
                   </div>
                 ))}
 
-                <div className="flex items-center justify-between pt-1">
+                {/* Destination Address with Search Autocomplete */}
+                <LocationSearchInput
+                  label="Destination (Drop-off Address)"
+                  value={destinationLocation}
+                  onChange={setDestinationLocation}
+                  onSelectLocation={point => {
+                    setDestinationCoords({ latitude: point.latitude, longitude: point.longitude });
+                    setDestinationLocation(point.address);
+                  }}
+                  onToggleMapPin={() => setActivePinSelection(activePinSelection === 'destination' ? 'none' : 'destination')}
+                  isSettingOnMap={activePinSelection === 'destination'}
+                  dotColor="red"
+                  showQuickPicks={true}
+                  placeholder="Search drop-off destination or landmark..."
+                />
+
+                {/* Action Buttons: Add Stop & Round Trip Checkbox */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                   <button
                     type="button"
                     onClick={handleAddStop}
-                    className="text-xs font-bold text-brand-600 hover:text-brand-800 flex items-center gap-1"
+                    className="text-xs font-bold text-brand-600 hover:text-brand-800 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-50 hover:bg-brand-100 transition-colors self-start"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    Add Intermediate Stop
+                    <span>+ Add Intermediate Stop</span>
                   </button>
 
                   {/* Return Trip Toggle */}
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 transition-colors">
                     <input
                       type="checkbox"
                       checked={isReturnTrip}
                       onChange={e => handleToggleReturnTrip(e.target.checked)}
-                      className="rounded text-brand-600 focus:ring-brand-500 w-4 h-4"
+                      className="rounded text-brand-600 focus:ring-brand-500 w-4 h-4 cursor-pointer"
                     />
-                    <RotateCcw className="w-3.5 h-3.5 text-purple-600" />
+                    <RotateCcw className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                     <span>Round Trip (Include Return Journey)</span>
                   </label>
                 </div>
               </div>
 
-              {/* Road Routing Calculation Feedback Banner (Requirement 1: Informational road distance & driving time) */}
-              <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
-                <div className="flex items-center justify-between">
+              {/* Road Routing Calculation Feedback Banner */}
+              <div className="mt-4 p-4 bg-gradient-to-br from-slate-50 to-brand-50/20 border border-slate-200 rounded-2xl space-y-3 text-xs">
+                <div className="grid grid-cols-2 gap-3 pb-2 border-b border-slate-200">
                   <div>
-                    <span className="text-slate-500 font-semibold block text-[10px] uppercase">Outbound Road Distance</span>
+                    <span className="text-slate-500 font-bold block text-[10px] uppercase">Outbound Road Distance</span>
                     <span className="font-black text-slate-900 text-sm">
                       {outboundKm} km <span className="text-[11px] font-normal text-slate-500">(~{outboundMins} mins drive)</span>
                     </span>
                   </div>
 
                   {isReturnTrip ? (
-                    <div className="text-right">
-                      <span className="text-purple-700 font-semibold block text-[10px] uppercase">Return Road Distance</span>
+                    <div>
+                      <span className="text-purple-700 font-bold block text-[10px] uppercase">Return Road Distance</span>
                       <span className="font-black text-purple-900 text-sm">
                         {returnKm} km <span className="text-[11px] font-normal text-purple-600">(~{returnMins} mins drive)</span>
                       </span>
                     </div>
                   ) : (
-                    <div className="text-right">
-                      <span className="text-slate-500 font-semibold block text-[10px] uppercase">Trip Mode</span>
+                    <div>
+                      <span className="text-slate-500 font-bold block text-[10px] uppercase">Trip Mode</span>
                       <span className="font-bold text-slate-800">One-Way Journey</span>
                     </div>
                   )}
                 </div>
 
-                <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-slate-700">
-                  <span className="font-bold">Total Estimated Road Distance:</span>
-                  <span className="font-black text-slate-900 text-sm">{totalRoadKm} km</span>
+                <div className="flex items-center justify-between text-slate-700">
+                  <div>
+                    <span className="font-bold">Total Road Distance: </span>
+                    <span className="font-black text-slate-900 text-sm">{totalRoadKm} km</span>
+                    {intermediateStops.length > 0 && (
+                      <span className="ml-2 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold">
+                        {intermediateStops.length} {intermediateStops.length === 1 ? 'Stop' : 'Stops'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase text-slate-400 block font-bold">Estimated Fare</span>
+                    <span className="font-black text-brand-700 text-base">₹{estimatedFareResult.totalEstimatedFare}</span>
+                  </div>
                 </div>
 
-                <p className="text-[11px] text-slate-500 pt-1 leading-tight">
-                  Driving times are routing estimates. In the next step, you will specify your planned destination waiting time and expected total service duration.
+                <p className="text-[11px] text-slate-500 leading-tight">
+                  Driving times & road distances are computed via high-precision road networks. In the next steps, you can set reporting time and vehicle details.
                 </p>
               </div>
 

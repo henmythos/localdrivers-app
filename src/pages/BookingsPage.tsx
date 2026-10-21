@@ -16,11 +16,25 @@ export const BookingsPage: React.FC = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [error, setError] = useState<string>('');
 
-  const loadBookings = (phoneToUse?: string) => {
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  const loadBookings = async (phoneToUse?: string) => {
+    dbService.cleanupDuplicateBookings();
     const targetPhone = phoneToUse !== undefined ? phoneToUse : customerPhone;
     if (targetPhone.trim().length >= 10) {
-      const found = bookingsService.getBookingsByCustomerPhone(targetPhone);
-      setBookings(found);
+      const local = bookingsService.getBookingsByCustomerPhone(targetPhone);
+      setBookings(local);
+      try {
+        setIsLoading(true);
+        const live = await bookingsService.getBookingsByCustomerPhoneAsync(targetPhone);
+        if (live && live.length > 0) {
+          setBookings(live);
+        }
+      } catch (err) {
+        console.warn('[Customer Booking Hub] Live fetch note:', err);
+      } finally {
+        setIsLoading(false);
+      }
     } else {
       setBookings(bookingsService.getCustomerBookings());
     }
@@ -31,7 +45,19 @@ export const BookingsPage: React.FC = () => {
     const unsubscribe = dbService.subscribe(() => {
       loadBookings();
     });
-    return () => unsubscribe();
+    // Poll every 5 seconds for status changes (e.g. driver accepted)
+    const pollInterval = setInterval(() => {
+      if (customerPhone.trim().length >= 10) {
+        bookingsService.getBookingsByCustomerPhoneAsync(customerPhone).then(live => {
+          if (live && live.length > 0) setBookings(live);
+        }).catch(() => {});
+      }
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(pollInterval);
+    };
   }, [customerPhone]);
 
   const handleVerifyPhone = (e: React.FormEvent) => {
@@ -50,6 +76,7 @@ export const BookingsPage: React.FC = () => {
   };
 
   const handleClearSession = () => {
+    dbService.cleanupDuplicateBookings();
     localStorage.removeItem('localdrivers_verified_customer_phone');
     setCustomerPhone('');
     setInputPhone('');

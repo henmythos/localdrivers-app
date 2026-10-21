@@ -59,7 +59,7 @@ export const bookingsService = {
       const b = res.data.booking || (Array.isArray(res.data.bookings) ? res.data.bookings[0] : null);
       if (b) {
         try {
-          dbService.createBooking(b);
+          dbService.upsertBooking(b, false);
         } catch {}
         return b;
       }
@@ -72,6 +72,7 @@ export const bookingsService = {
   // Get customer local bookings filtered by verified customer phone number
   getBookingsByCustomerPhone(phone: string): Booking[] {
     this.checkAndAutoPassPendingBookings();
+    dbService.cleanupDuplicateBookings();
     const cleanPhoneDigits = phone.replace(/\D/g, '');
     if (!cleanPhoneDigits || cleanPhoneDigits.length < 10) return [];
     
@@ -82,9 +83,35 @@ export const bookingsService = {
     });
   },
 
+  // Fetch customer bookings live from server by phone number
+  async getBookingsByCustomerPhoneAsync(phone: string): Promise<Booking[]> {
+    const cleanPhoneDigits = phone.replace(/\D/g, '').slice(-10);
+    if (!cleanPhoneDigits || cleanPhoneDigits.length < 10) return [];
+
+    const res = await apiClient.get<{ bookings: Booking[] }>(
+      `/api/bookings?phone=${encodeURIComponent(cleanPhoneDigits)}`,
+      {
+        fallbackErrorMessage: 'Unable to retrieve live bookings for customer.',
+      }
+    );
+
+    if (res.success && res.data && Array.isArray(res.data.bookings)) {
+      res.data.bookings.forEach(b => {
+        try {
+          dbService.upsertBooking(b, false);
+        } catch {}
+      });
+      dbService.cleanupDuplicateBookings();
+      return res.data.bookings;
+    }
+
+    return this.getBookingsByCustomerPhone(phone);
+  },
+
   // Get customer local bookings remembered on device
   getCustomerBookings(verifiedPhone?: string): Booking[] {
     this.checkAndAutoPassPendingBookings();
+    dbService.cleanupDuplicateBookings();
     if (verifiedPhone) {
       return this.getBookingsByCustomerPhone(verifiedPhone);
     }
@@ -102,10 +129,55 @@ export const bookingsService = {
     return allBookings.filter(b => savedIds.includes(b.id));
   },
 
-  // Get driver bookings
+  // Get driver bookings from local cache
   getDriverBookings(driverId: string): Booking[] {
     this.checkAndAutoPassPendingBookings();
     return dbService.getBookingsForDriver(driverId);
+  },
+
+  // Fetch driver bookings live from server
+  async getDriverBookingsAsync(driverId: string): Promise<Booking[]> {
+    const res = await apiClient.get<{ bookings: Booking[] }>(
+      `/api/bookings?driverId=${encodeURIComponent(driverId)}`,
+      {
+        fallbackErrorMessage: 'Unable to retrieve live bookings for driver.',
+      }
+    );
+
+    if (res.success && res.data && Array.isArray(res.data.bookings)) {
+      res.data.bookings.forEach(b => {
+        try {
+          dbService.upsertBooking(b, false);
+        } catch {}
+      });
+      return res.data.bookings;
+    }
+    return this.getDriverBookings(driverId);
+  },
+
+  // Driver Accept Booking (Persists to Server)
+  async acceptBookingAsync(id: string): Promise<{ success: boolean; error?: string }> {
+    const res = await apiClient.post<{ success: boolean; error?: string }>(
+      '/api/bookings',
+      { action: 'accept', bookingId: id },
+      { fallbackErrorMessage: 'Failed to accept booking on server.' }
+    );
+    if (res.success && res.data?.success) {
+      dbService.updateBookingStatus(id, 'Accepted');
+      return { success: true };
+    }
+    return { success: false, error: res.error || res.data?.error };
+  },
+
+  // Driver Pass / Reject Booking to next online driver (Persists to Server)
+  async passToNextDriverAsync(id: string): Promise<{ success: boolean; error?: string }> {
+    const res = await apiClient.post<{ success: boolean; error?: string }>(
+      '/api/bookings',
+      { action: 'pass', bookingId: id },
+      { fallbackErrorMessage: 'Failed to pass booking on server.' }
+    );
+    dbService.reassignBookingToNextDriver(id);
+    return { success: res.success };
   },
 
   // Create a new booking (Customer) with server persistence and race safety
@@ -127,12 +199,12 @@ export const bookingsService = {
 
     if (res.success && res.data?.booking) {
       const serverBooking = res.data.booking;
-      // Save locally to dbService for reactive UI updates
+      // Save locally to dbService for reactive UI updates safely
       try {
-        dbService.createBooking({
+        dbService.upsertBooking({
           ...bookingInput,
           ...serverBooking,
-        });
+        }, true);
       } catch {}
 
       localStorage.setItem('localdrivers_verified_customer_phone', bookingInput.customerPhone);

@@ -14,8 +14,8 @@ interface RouteMapProps {
   actualStartCoords?: { latitude: number; longitude: number };
   actualEndCoords?: { latitude: number; longitude: number };
   interactive?: boolean;
-  activePinSelection?: 'pickup' | 'destination' | 'none';
-  onLocationSelect?: (type: 'pickup' | 'destination', coords: { latitude: number; longitude: number }) => void;
+  activePinSelection?: 'pickup' | 'destination' | 'none' | string;
+  onLocationSelect?: (type: string, coords: { latitude: number; longitude: number }) => void;
   height?: string;
 }
 
@@ -140,9 +140,18 @@ export const RouteMap: React.FC<RouteMapProps> = ({
       if (stop.latitude && stop.longitude) {
         const pos: [number, number] = [stop.latitude, stop.longitude];
         boundsPoints.push(pos);
-        L.marker(pos, {
+        const isSelectedStop = activePinSelection === `stop-${idx}` || activePinSelection === `stop-${stop.id}`;
+        const marker = L.marker(pos, {
           icon: createCustomPinIcon('#f59e0b', `Stop ${idx + 1}`),
-        }).addTo(layerGroup);
+          draggable: interactive && isSelectedStop,
+        });
+        if (interactive && onLocationSelect) {
+          marker.on('dragend', (e) => {
+            const latlng = e.target.getLatLng();
+            onLocationSelect(`stop-${idx}`, { latitude: latlng.lat, longitude: latlng.lng });
+          });
+        }
+        marker.addTo(layerGroup);
       }
     });
 
@@ -236,8 +245,25 @@ export const RouteMap: React.FC<RouteMapProps> = ({
       {/* Interactive Helper Hint Badge */}
       {interactive && activePinSelection !== 'none' && (
         <div className="absolute top-3 left-3 z-[400] bg-slate-900/90 text-white backdrop-blur-md px-3 py-1.5 rounded-xl text-[11px] font-bold shadow-lg flex items-center gap-1.5 border border-white/20">
-          <MapPin className={`w-3.5 h-3.5 ${activePinSelection === 'pickup' ? 'text-emerald-400' : 'text-red-400'}`} />
-          <span>Click anywhere on the map to set {activePinSelection === 'pickup' ? 'Pickup Pin' : 'Destination Pin'}</span>
+          <MapPin
+            className={`w-3.5 h-3.5 ${
+              activePinSelection === 'pickup'
+                ? 'text-emerald-400'
+                : activePinSelection === 'destination'
+                ? 'text-red-400'
+                : 'text-amber-400'
+            }`}
+          />
+          <span>
+            Click anywhere on the map to set{' '}
+            {activePinSelection === 'pickup'
+              ? 'Pickup Pin'
+              : activePinSelection === 'destination'
+              ? 'Destination Pin'
+              : activePinSelection.startsWith('stop-')
+              ? `Stop ${Number(activePinSelection.replace('stop-', '')) + 1} Pin`
+              : 'Pin'}
+          </span>
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { defineConfig, Plugin } from 'vite';
+import { defineConfig, Plugin, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
@@ -51,6 +51,10 @@ function apiDevPlugin(): Plugin {
             const { default: handler } = await server.ssrLoadModule('./api/drivers/index.ts');
             return await handler(req, customRes);
           }
+          if (url === '/api/admin/login') {
+            const { default: handler } = await server.ssrLoadModule('./api/admin/login.ts');
+            return await handler(req, customRes);
+          }
           if (url === '/api/admin/pending-drivers') {
             const { default: handler } = await server.ssrLoadModule('./api/admin/pending-drivers.ts');
             return await handler(req, customRes);
@@ -65,6 +69,10 @@ function apiDevPlugin(): Plugin {
           }
           if (url === '/api/admin/reject') {
             const { default: handler } = await server.ssrLoadModule('./api/admin/reject.ts');
+            return await handler(req, customRes);
+          }
+          if (url === '/api/bookings') {
+            const { default: handler } = await server.ssrLoadModule('./api/bookings.ts');
             return await handler(req, customRes);
           }
           if (url === '/api/upload') {
@@ -87,15 +95,21 @@ function apiDevPlugin(): Plugin {
   };
 }
 
-export default defineConfig({
-  plugins: [react(), apiDevPlugin()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  Object.assign(process.env, env);
+
+  return {
+    plugins: [react(), apiDevPlugin()],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
+      },
     },
-  },
-  server: {
-    port: 3000,
-    host: true,
-  },
+    server: {
+      port: 3000,
+      host: true,
+    },
+  };
 });
+

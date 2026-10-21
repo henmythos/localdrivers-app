@@ -104,13 +104,13 @@ export const BookingDetailPage: React.FC = () => {
     };
   }, [id]);
 
-  // Auto-pass if still pending after 20s
+  // Auto-pass if still pending after 60s
   useEffect(() => {
     if (booking && booking.status === 'Pending') {
       const assignedTime = new Date(booking.assignedAt || booking.createdAt).getTime();
       const elapsedSeconds = Math.floor((nowTimestamp - assignedTime) / 1000);
-      if (elapsedSeconds >= 20) {
-        bookingsService.passToNextDriver(booking.id);
+      if (elapsedSeconds >= 60) {
+        bookingsService.passToNextDriverAsync(booking.id).catch(() => {});
       }
     }
   }, [nowTimestamp, booking]);
@@ -298,7 +298,7 @@ export const BookingDetailPage: React.FC = () => {
           <div>
             {booking.status === 'Pending' && (() => {
               const assignedTime = new Date(booking.assignedAt || booking.createdAt).getTime();
-              const remainingSec = Math.max(0, 20 - Math.floor((nowTimestamp - assignedTime) / 1000));
+              const remainingSec = Math.max(0, 60 - Math.floor((nowTimestamp - assignedTime) / 1000));
               return (
                 <span className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-amber-400 text-amber-950 flex items-center gap-2 shadow-md">
                   <span className="w-2 h-2 rounded-full bg-amber-950 animate-ping" />

@@ -31,8 +31,9 @@ export default async function handler(req: any, res: any) {
         sql += ` AND id = ?`;
         args.push(idParam);
       } else if (driverIdParam) {
-        sql += ` AND driver_id = ?`;
-        args.push(driverIdParam);
+        const cleanCode = String(driverIdParam).replace(/^#/, '');
+        sql += ` AND (driver_id = ? OR driver_code = ? OR driver_code = ?)`;
+        args.push(driverIdParam, driverIdParam, cleanCode);
       } else if (phoneParam) {
         // Match last 10 digits
         const cleanDigits = phoneParam.replace(/\D/g, '').slice(-10);
@@ -276,7 +277,124 @@ export default async function handler(req: any, res: any) {
         });
       }
 
-      // 3. ACTION: CANCEL BOOKING
+      // 3. ACTION: ACCEPT BOOKING
+      if (action === 'accept' || action === 'accept_booking') {
+        const { bookingId } = body;
+        if (!bookingId) {
+          return res.status(400).json({ success: false, error: 'bookingId is required.' });
+        }
+
+        const bkgRes = await db.execute({
+          sql: `SELECT * FROM bookings WHERE id = ?`,
+          args: [bookingId],
+        });
+
+        if (bkgRes.rows.length === 0) {
+          return res.status(404).json({ success: false, error: 'Booking not found.' });
+        }
+
+        const booking = bkgRes.rows[0];
+        const bkgDriverId = String(booking.driver_id);
+
+        await db.execute({
+          sql: `UPDATE bookings SET status = 'Accepted', updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
+          args: [bookingId],
+        });
+
+        await db.execute({
+          sql: `UPDATE drivers SET current_work_status = 'assigned', active_booking_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
+          args: [bookingId, bkgDriverId],
+        });
+
+        return res.status(200).json({
+          success: true,
+          bookingId,
+          status: 'Accepted',
+          message: 'Booking accepted by driver.',
+        });
+      }
+
+      // 4. ACTION: PASS / REJECT TO NEXT DRIVER
+      if (action === 'pass' || action === 'pass_booking' || action === 'reject') {
+        const { bookingId } = body;
+        if (!bookingId) {
+          return res.status(400).json({ success: false, error: 'bookingId is required.' });
+        }
+
+        const bkgRes = await db.execute({
+          sql: `SELECT * FROM bookings WHERE id = ?`,
+          args: [bookingId],
+        });
+
+        if (bkgRes.rows.length === 0) {
+          return res.status(404).json({ success: false, error: 'Booking not found.' });
+        }
+
+        const booking = bkgRes.rows[0];
+        const oldDriverId = String(booking.driver_id);
+
+        // Find next available online driver
+        const nextDriverRes = await db.execute({
+          sql: `
+            SELECT id, name, phone, photo, driver_code 
+            FROM drivers 
+            WHERE status = 'Approved' 
+              AND is_online = 1 
+              AND is_hold = 0 
+              AND (current_work_status IS NULL OR current_work_status = 'available')
+              AND id != ?
+            LIMIT 1;
+          `,
+          args: [oldDriverId],
+        });
+
+        if (nextDriverRes.rows.length > 0) {
+          const nextDrv = nextDriverRes.rows[0];
+          const nextDrvId = String(nextDrv.id);
+
+          await db.execute({
+            sql: `
+              UPDATE bookings 
+              SET driver_id = ?, 
+                  driver_name = ?, 
+                  driver_phone = ?, 
+                  driver_photo = ?, 
+                  driver_code = ?, 
+                  status = 'Pending', 
+                  updated_at = CURRENT_TIMESTAMP 
+              WHERE id = ?;
+            `,
+            args: [
+              nextDrvId,
+              String(nextDrv.name),
+              String(nextDrv.phone),
+              String(nextDrv.photo || ''),
+              String(nextDrv.driver_code || ''),
+              bookingId,
+            ],
+          });
+
+          // Reserve next driver
+          await db.execute({
+            sql: `UPDATE drivers SET current_work_status = 'assigned', active_booking_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
+            args: [bookingId, nextDrvId],
+          });
+        }
+
+        // Release old driver
+        await db.execute({
+          sql: `UPDATE drivers SET current_work_status = 'available', active_booking_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
+          args: [oldDriverId],
+        });
+
+        return res.status(200).json({
+          success: true,
+          bookingId,
+          message: 'Booking passed to next available driver.',
+        });
+      }
+
+      // 5. ACTION: CANCEL BOOKING
       if (action === 'cancel' || action === 'cancel_booking') {
         const { bookingId } = body;
         if (!bookingId) {
@@ -378,9 +496,10 @@ export default async function handler(req: any, res: any) {
       }
 
       // Validate driver eligibility and perform atomic reservation
+      const cleanDriverCode = String(driverId).replace(/^#/, '');
       const driverCheck = await db.execute({
-        sql: `SELECT id, name, phone, photo, driver_code, status, is_hold, is_online, current_work_status FROM drivers WHERE id = ?`,
-        args: [driverId],
+        sql: `SELECT id, name, phone, photo, driver_code, status, is_hold, is_online, current_work_status FROM drivers WHERE id = ? OR driver_code = ? OR driver_code = ? LIMIT 1`,
+        args: [driverId, driverId, cleanDriverCode],
       });
 
       if (driverCheck.rows.length === 0) {
@@ -391,6 +510,8 @@ export default async function handler(req: any, res: any) {
       }
 
       const driverRow = driverCheck.rows[0];
+      const canonicalDriverId = String(driverRow.id);
+      const canonicalDriverCode = String(driverRow.driver_code || '');
       const status = String(driverRow.status);
       const isHold = Boolean(driverRow.is_hold);
       const isOnline = Boolean(driverRow.is_online);
@@ -432,7 +553,7 @@ export default async function handler(req: any, res: any) {
             AND is_online = 1 
             AND (current_work_status IS NULL OR current_work_status = 'available');
         `,
-        args: [bookingId, driverId],
+        args: [bookingId, canonicalDriverId],
       });
 
       if (claimResult.rowsAffected === 0) {
@@ -459,11 +580,11 @@ export default async function handler(req: any, res: any) {
             bookingId,
             customerName || 'Customer',
             customerPhone,
-            driverId,
+            canonicalDriverId,
             String(driverRow.name),
             String(driverRow.phone),
             String(driverRow.photo || ''),
-            String(driverRow.driver_code || ''),
+            canonicalDriverCode,
             serviceTitle || 'City Driver',
             pickupLocation,
             destinationLocation || '',

@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   Power, ShieldCheck, Star, Calendar, Clock, MapPin, Navigation, 
   CheckCircle2, XCircle, LogOut, AlertTriangle, CreditCard, ExternalLink, RefreshCw,
-  Phone, Lock, Car, MessageSquare, Play, Square, Compass, X
+  Phone, Lock, Car, MessageSquare, Play, Square, Compass, X, Bell, Volume2
 } from 'lucide-react';
 import { Driver, Booking } from '../../types';
 import { authService } from '../../services/auth';
@@ -15,12 +15,89 @@ import { gpsService } from '../../services/gps';
 import { billingService } from '../../services/billing';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
+// Synthesize pleasant, loud attention chime for incoming customer dispatches using Web Audio API
+function playDispatchAlertSound() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    const t = ctx.currentTime;
+    // Tone 1: 880Hz (A5)
+    const o1 = ctx.createOscillator();
+    const g1 = ctx.createGain();
+    o1.type = 'triangle';
+    o1.frequency.setValueAtTime(880, t);
+    g1.gain.setValueAtTime(0.5, t);
+    g1.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+    o1.connect(g1);
+    g1.connect(ctx.destination);
+    o1.start(t);
+    o1.stop(t + 0.25);
+
+    // Tone 2: 1175Hz (D6)
+    const o2 = ctx.createOscillator();
+    const g2 = ctx.createGain();
+    o2.type = 'sine';
+    o2.frequency.setValueAtTime(1174.66, t + 0.18);
+    g2.gain.setValueAtTime(0.6, t + 0.18);
+    g2.gain.exponentialRampToValueAtTime(0.01, t + 0.7);
+    o2.connect(g2);
+    g2.connect(ctx.destination);
+    o2.start(t + 0.18);
+    o2.stop(t + 0.7);
+
+    // Tone 3: 1396.9Hz (F6)
+    const o3 = ctx.createOscillator();
+    const g3 = ctx.createGain();
+    o3.type = 'sine';
+    o3.frequency.setValueAtTime(1396.91, t + 0.35);
+    g3.gain.setValueAtTime(0.4, t + 0.35);
+    g3.gain.exponentialRampToValueAtTime(0.001, t + 0.95);
+    o3.connect(g3);
+    g3.connect(ctx.destination);
+    o3.start(t + 0.35);
+    o3.stop(t + 0.95);
+  } catch (e) {
+    console.warn('[Driver Alert Sound] Audio synthesis note:', e);
+  }
+}
+
+// Trigger multi-sensory notification: audio chime + device vibration + system notification
+function triggerDeviceAlert(booking: Booking) {
+  playDispatchAlertSound();
+
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate([300, 150, 300, 150, 450]);
+    } catch {}
+  }
+
+  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(`New Ride Request: ₹${booking.estimatedFare}`, {
+        body: `Service: ${booking.serviceTitle}\nPickup: ${booking.pickupLocation}`,
+        icon: '/favicon.ico',
+        tag: `ld-booking-${booking.id}`,
+      });
+    } catch {}
+  }
+}
+
 export const DriverDashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const [driver, setDriver] = useState<Driver | null>(null);
   const [driverBookings, setDriverBookings] = useState<Booking[]>([]);
   const [paymentSuccessMsg, setPaymentSuccessMsg] = useState<string | null>(null);
   const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
+  const [isProcessingActionId, setIsProcessingActionId] = useState<string | null>(null);
+  const [alertsEnabled, setAlertsEnabled] = useState<boolean>(true);
+
+  // Track known pending requests to avoid repetitive chime looping
+  const prevPendingIdsRef = useRef<Set<string>>(new Set());
 
   // Trip Start & End Modals State
   const [startTripBooking, setStartTripBooking] = useState<Booking | null>(null);
@@ -43,7 +120,7 @@ export const DriverDashboardPage: React.FC = () => {
   const [availabilitySuccessMsg, setAvailabilitySuccessMsg] = useState<string | null>(null);
   const [isTogglingAvailability, setIsTogglingAvailability] = useState<boolean>(false);
 
-  const loadData = () => {
+  const loadData = async () => {
     const state = authService.getAuthState();
     if (!state.isDriverAuthenticated || !state.driver) {
       navigate('/driver/login');
@@ -51,34 +128,83 @@ export const DriverDashboardPage: React.FC = () => {
     }
     const currentDriver = driversService.getDriverById(state.driver.id) || state.driver;
     setDriver(currentDriver);
-    setDriverBookings(bookingsService.getDriverBookings(currentDriver.id));
 
-    // Re-verify latest state from server
-    driversService.getDriverByIdAsync(state.driver.id).then(fresh => {
-      if (fresh) {
-        setDriver(fresh);
+    // Initial local read for fast instant render
+    const local = bookingsService.getDriverBookings(currentDriver.id);
+    setDriverBookings(local);
+
+    // Live authoritative fetch from server
+    try {
+      const [freshDriver, freshBookings] = await Promise.all([
+        driversService.getDriverByIdAsync(state.driver.id).catch(() => null),
+        bookingsService.getDriverBookingsAsync(currentDriver.id).catch(() => null)
+      ]);
+
+      if (freshDriver) {
+        setDriver(freshDriver);
       }
-    }).catch(err => {
+
+      if (freshBookings && Array.isArray(freshBookings)) {
+        setDriverBookings(freshBookings);
+
+        // Detect newly arrived pending requests
+        const pending = freshBookings.filter(b => b.status === 'Pending');
+        pending.forEach(req => {
+          if (!prevPendingIdsRef.current.has(req.id)) {
+            triggerDeviceAlert(req);
+          }
+        });
+        prevPendingIdsRef.current = new Set(pending.map(b => b.id));
+      }
+    } catch (err) {
       console.warn('[DriverDashboard] Background state sync note:', err);
-    });
+    }
   };
 
   useEffect(() => {
     loadData();
+
+    // Ask notification permission if not yet decided
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+
     const unsubscribe = dbService.subscribe(() => {
       loadData();
     });
-    const timer = setInterval(() => {
+
+    // 1-second clock tick
+    const clockTimer = setInterval(() => {
       setNowTimestamp(Date.now());
     }, 1000);
 
+    // 3-second live server polling for rapid customer dispatch detection
+    const pollTimer = setInterval(() => {
+      const state = authService.getAuthState();
+      if (state.driver?.id) {
+        bookingsService.getDriverBookingsAsync(state.driver.id).then(freshBookings => {
+          if (freshBookings && Array.isArray(freshBookings)) {
+            setDriverBookings(freshBookings);
+            const pending = freshBookings.filter(b => b.status === 'Pending');
+            pending.forEach(req => {
+              if (!prevPendingIdsRef.current.has(req.id)) {
+                triggerDeviceAlert(req);
+              }
+            });
+            prevPendingIdsRef.current = new Set(pending.map(b => b.id));
+          }
+        }).catch(() => {});
+      }
+    }, 3000);
+
     return () => {
       unsubscribe();
-      clearInterval(timer);
+      clearInterval(clockTimer);
+      clearInterval(pollTimer);
     };
   }, []);
 
-  // Automatic 20-second timeout: automatically pass to next online driver if unaccepted
+  // Automatic 60-second timeout: automatically pass to next online driver if unaccepted
   useEffect(() => {
     if (!driver) return;
     const pending = driverBookings.filter(b => b.status === 'Pending');
@@ -86,8 +212,10 @@ export const DriverDashboardPage: React.FC = () => {
     pending.forEach(req => {
       const assignedTime = new Date(req.assignedAt || req.createdAt).getTime();
       const elapsedSeconds = Math.floor((nowTimestamp - assignedTime) / 1000);
-      if (elapsedSeconds >= 20) {
-        bookingsService.passToNextDriver(req.id);
+      if (elapsedSeconds >= 60) {
+        bookingsService.passToNextDriverAsync(req.id).then(() => {
+          loadData();
+        }).catch(() => {});
       }
     });
   }, [nowTimestamp, driverBookings, driver]);
@@ -98,7 +226,13 @@ export const DriverDashboardPage: React.FC = () => {
   const activeBookings = driverBookings.filter(b => b.status === 'Accepted' || b.status === 'Driver Arriving' || b.status === 'In Progress');
   const completedTrips = driverBookings.filter(b => b.status === 'Completed');
 
-  const totalEarnings = completedTrips.reduce((acc, curr) => acc + (curr.finalFare || curr.estimatedFare), 3200);
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayCompletedTrips = completedTrips.filter(b => {
+    const tripDate = b.tripCompletedAt || b.updatedAt || b.createdAt;
+    return tripDate && new Date(tripDate).toISOString().split('T')[0] === todayStr;
+  });
+  const todayEarnings = todayCompletedTrips.reduce((acc, curr) => acc + (curr.finalFare || curr.estimatedFare || 0), 0);
+  const totalEarnings = completedTrips.reduce((acc, curr) => acc + (curr.finalFare || curr.estimatedFare || 0), 0);
   const pendingFee = driver.pendingCommissionFee || 0;
   const isHold = driver.isHold || pendingFee > 0 || driver.status === 'Hold' || driver.status === 'Payment Due';
 
@@ -151,18 +285,37 @@ export const DriverDashboardPage: React.FC = () => {
     }
   };
 
-  const handleAcceptRequest = (bookingId: string) => {
+  const handleAcceptRequest = async (bookingId: string) => {
     if (isHold) {
       alert('Your profile is on Hold. Please settle your platform fee to accept new bookings.');
       return;
     }
-    bookingsService.updateStatus(bookingId, 'Accepted');
-    loadData();
+    setIsProcessingActionId(bookingId);
+    try {
+      const res = await bookingsService.acceptBookingAsync(bookingId);
+      if (res.success) {
+        await loadData();
+      } else {
+        alert(res.error || 'Unable to accept booking. It may have expired or been assigned to another driver.');
+        await loadData();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error accepting booking.');
+    } finally {
+      setIsProcessingActionId(null);
+    }
   };
 
-  const handleRejectRequest = (bookingId: string) => {
-    bookingsService.passToNextDriver(bookingId);
-    loadData();
+  const handleRejectRequest = async (bookingId: string) => {
+    setIsProcessingActionId(bookingId);
+    try {
+      await bookingsService.passToNextDriverAsync(bookingId);
+      await loadData();
+    } catch (err: any) {
+      console.error('Error passing booking:', err);
+    } finally {
+      setIsProcessingActionId(null);
+    }
   };
 
   // Start Trip Action (Captures Start GPS & Starts Authoritative Timer)
@@ -351,7 +504,7 @@ export const DriverDashboardPage: React.FC = () => {
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-soft">
           <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Today's Earnings</span>
           <div className="text-2xl font-black text-slate-900 mt-1 flex items-center">
-            <span>₹{totalEarnings}</span>
+            <span>₹{todayEarnings}</span>
           </div>
         </div>
 
@@ -562,15 +715,60 @@ export const DriverDashboardPage: React.FC = () => {
 
       {/* PENDING BOOKING REQUESTS SECTION */}
       <div className="space-y-6 mb-8">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
-            <span>Pending Customer Requests</span>
-            {pendingRequests.length > 0 && (
-              <span className="w-2.5 h-2.5 rounded-full bg-brand-600 animate-ping" />
-            )}
-          </h2>
-          <span className="text-xs font-bold text-slate-500">Real-time Dispatch</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+              <span>Pending Customer Requests</span>
+              {pendingRequests.length > 0 && (
+                <span className="w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
+              )}
+            </h2>
+            <span className="text-xs font-bold text-slate-500">• Real-time Dispatch</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                playDispatchAlertSound();
+                if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+              }}
+              className="px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-800 text-xs font-bold rounded-xl border border-brand-200 transition-colors flex items-center gap-1.5"
+              title="Test dispatch alert sound"
+            >
+              <Volume2 className="w-3.5 h-3.5 text-brand-600" />
+              <span>Test Chime</span>
+            </button>
+            <button
+              onClick={() => loadData()}
+              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-colors"
+              title="Refresh requests"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
+
+        {/* HIGH-ATTENTION ALERT BANNER WHEN RIDE IS WAITING */}
+        {pendingRequests.length > 0 && (
+          <div className="p-4 bg-gradient-to-r from-emerald-500 via-brand-600 to-emerald-600 text-white rounded-2xl shadow-xl flex items-center justify-between gap-3 animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
+                <Bell className="w-5 h-5 text-white animate-bounce" />
+              </div>
+              <div>
+                <span className="text-xs font-black uppercase tracking-wider block">
+                  🚨 New Customer Ride Dispatch Available!
+                </span>
+                <span className="text-[11px] text-white/90 font-medium">
+                  Respond before the 60-second dispatch window passes to another driver.
+                </span>
+              </div>
+            </div>
+            <span className="px-3 py-1 bg-white/20 rounded-full font-mono font-black text-xs shrink-0">
+              {pendingRequests.length} Waiting
+            </span>
+          </div>
+        )}
 
         {pendingRequests.length > 0 ? (
           <div className="space-y-4">
@@ -582,21 +780,22 @@ export const DriverDashboardPage: React.FC = () => {
 
               const assignedTime = new Date(req.assignedAt || req.createdAt).getTime();
               const elapsedSeconds = Math.floor((nowTimestamp - assignedTime) / 1000);
-              const remainingSec = Math.max(0, 20 - elapsedSeconds);
-              const progressPct = Math.min(100, Math.max(0, (remainingSec / 20) * 100));
+              const remainingSec = Math.max(0, 60 - elapsedSeconds);
+              const progressPct = Math.min(100, Math.max(0, (remainingSec / 60) * 100));
+              const isProcessing = isProcessingActionId === req.id;
 
               return (
                 <div
                   key={req.id}
-                  className="bg-white rounded-3xl p-6 border-2 border-brand-500/80 shadow-2xl relative overflow-hidden space-y-4"
+                  className="bg-white rounded-3xl p-6 border-2 border-brand-500/80 shadow-2xl relative overflow-hidden space-y-4 ring-4 ring-brand-100"
                 >
                   {/* COUNTDOWN PROGRESS BAR */}
                   <div className="absolute top-0 left-0 right-0 h-2 bg-slate-100">
                     <div
                       className={`h-full transition-all duration-1000 ease-linear ${
-                        remainingSec > 10
+                        remainingSec > 30
                           ? 'bg-emerald-500'
-                          : remainingSec > 5
+                          : remainingSec > 15
                           ? 'bg-amber-500'
                           : 'bg-red-500'
                       }`}
@@ -654,16 +853,18 @@ export const DriverDashboardPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-3 pt-2">
                     <button
                       onClick={() => handleRejectRequest(req.id)}
-                      className="py-3 px-4 rounded-xl border-2 border-slate-200 hover:bg-slate-50 text-slate-700 font-extrabold text-xs transition-colors"
+                      disabled={isProcessing}
+                      className="py-3 px-4 rounded-xl border-2 border-slate-200 hover:bg-slate-50 text-slate-700 font-extrabold text-xs transition-colors disabled:opacity-50"
                     >
-                      Decline / Pass
+                      {isProcessing ? 'Processing...' : 'Decline / Pass'}
                     </button>
                     <button
                       onClick={() => handleAcceptRequest(req.id)}
-                      className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-lg transition-colors flex items-center justify-center gap-1.5"
+                      disabled={isProcessing}
+                      className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                       <CheckCircle2 className="w-4 h-4" />
-                      Accept Booking ({remainingSec}s)
+                      {isProcessing ? 'Accepting...' : `Accept Booking (${remainingSec}s)`}
                     </button>
                   </div>
                 </div>
@@ -679,7 +880,7 @@ export const DriverDashboardPage: React.FC = () => {
               No pending customer requests currently in your zone.
             </p>
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              Stay Online with GPS enabled. New customer bookings in Hyderabad will alert you automatically.
+              Stay Online with GPS enabled. New customer bookings in Hyderabad will alert you automatically with audio & vibration notifications.
             </p>
           </div>
         )}
