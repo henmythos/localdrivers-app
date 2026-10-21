@@ -1,5 +1,5 @@
 import { initDb } from '../_lib/db.js';
-import { verifyAdminAuth, generateAdminToken, cleanEnvValue } from '../_lib/auth.js';
+import { verifyAdminAuth, generateAdminToken, cleanEnvValue, getAuthSecret } from '../_lib/auth.js';
 
 export default async function handler(req: any, res: any) {
   const reqId = `all-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -21,7 +21,7 @@ export default async function handler(req: any, res: any) {
       const rawPass = body.password || '';
 
       const cleanUser = String(rawUser).trim().toLowerCase();
-      const cleanPass = String(rawPass).trim();
+      const cleanPass = String(rawPass);
 
       if (!cleanUser || !cleanPass) {
         return res.status(400).json({
@@ -31,27 +31,26 @@ export default async function handler(req: any, res: any) {
         });
       }
 
-      const configuredAdminUser = cleanEnvValue(process.env.ADMIN_USERNAME) || 'Ranjith.ceo';
-      const configuredAdminPass = cleanEnvValue(process.env.ADMIN_PASSWORD) || 'ranjith@2026';
+      const configuredAdminUser = cleanEnvValue(process.env.ADMIN_USERNAME);
+      const configuredAdminPass = cleanEnvValue(process.env.ADMIN_PASSWORD);
+      const authSecret = getAuthSecret();
 
-      if (!configuredAdminUser || !configuredAdminPass) {
-        console.error(`[Admin Auth Config Error ${reqId}]: Server admin credentials not configured.`);
+      if (!configuredAdminUser || !configuredAdminPass || !authSecret) {
+        console.error(`[Admin Auth Config Error ${reqId}]: Server admin credentials or ADMIN_JWT_SECRET missing or unconfigured.`);
         return res.status(500).json({
           success: false,
-          error: 'Server authentication configuration error. Administrator credentials cannot be verified due to server environment configuration.',
+          error: 'Server authentication configuration error. Administrator credentials or security keys are not properly configured in the server environment.',
           requestId: reqId,
         });
       }
 
-      const isUserMatch =
-        cleanUser === configuredAdminUser.toLowerCase() ||
-        cleanUser === 'ranjith' ||
-        cleanUser === 'admin';
+      // Strict identity match: only the explicitly configured administrator account is permitted.
+      // Undocumented aliases ('admin', 'ranjith') are strictly disallowed.
+      const isUserMatch = cleanUser === configuredAdminUser.toLowerCase();
 
-      const isPassMatch =
-        cleanPass === configuredAdminPass ||
-        cleanPass.toLowerCase() === configuredAdminPass.toLowerCase() ||
-        (cleanUser === 'admin' && cleanPass === 'admin123');
+      // Strict password match: strictly case-sensitive comparison.
+      // Case-insensitivity and backdoors ('admin123') are strictly disallowed.
+      const isPassMatch = cleanPass === configuredAdminPass;
 
       if (!isUserMatch || !isPassMatch) {
         return res.status(401).json({

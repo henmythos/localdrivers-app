@@ -57,17 +57,18 @@ export default async function handler(req: any, res: any) {
 
     const driverName = driverCheck.rows[0].name;
 
+    const reviewedBy = process.env.ADMIN_USERNAME?.trim() || 'Admin';
     await db.execute({
       sql: `UPDATE drivers SET
         status = 'Rejected',
         verification_badge = 0,
         is_online = 0,
         rejection_reason = ?,
-        reviewed_by = 'Ranjith.ceo',
+        reviewed_by = ?,
         reviewed_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?;`,
-      args: [reason, driverId]
+      args: [reason, reviewedBy, driverId]
     });
 
     await db.execute({

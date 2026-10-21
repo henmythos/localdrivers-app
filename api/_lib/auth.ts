@@ -5,12 +5,22 @@ export function cleanEnvValue(val?: string): string {
   return val.trim().replace(/^["']|["']$/g, '').trim();
 }
 
+/**
+ * Authoritative JWT secret resolver.
+ * Must be configured via ADMIN_JWT_SECRET (or AUTH_SECRET/JWT_SECRET).
+ * Enforces a strict minimum of 32 characters (256-bit cryptographic strength).
+ * Fails closed by returning an empty string if unconfigured or insufficiently secure.
+ * Never uses hardcoded or static fallback keys in production or local environments.
+ */
 export function getAuthSecret(): string {
   const secret =
     cleanEnvValue(process.env.ADMIN_JWT_SECRET) ||
     cleanEnvValue(process.env.AUTH_SECRET) ||
-    cleanEnvValue(process.env.JWT_SECRET) ||
-    'localdrivers_production_sec_key_2026_x871b';
+    cleanEnvValue(process.env.JWT_SECRET);
+
+  if (!secret || secret.length < 32) {
+    return '';
+  }
   return secret;
 }
 
@@ -49,10 +59,14 @@ export function verifyPassword(password: string, hash: string, salt: string): bo
 }
 
 /**
- * Signs a payload with HMAC-SHA256 to create a tamper-proof JWT
+ * Signs a payload with HMAC-SHA256 to create a tamper-proof JWT.
+ * Fails closed if the authoritative server secret is missing or insufficiently secure.
  */
 export function signJwt(payload: Record<string, any>, expiresInMs: number = 7 * 24 * 60 * 60 * 1000): string {
   const secret = getAuthSecret();
+  if (!secret) {
+    throw new Error('Server authentication configuration error: Required ADMIN_JWT_SECRET is missing or insufficiently secure (minimum 32 characters required).');
+  }
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const claims = Buffer.from(JSON.stringify({ ...payload, exp: Date.now() + expiresInMs })).toString('base64url');
   const signature = crypto
@@ -63,7 +77,8 @@ export function signJwt(payload: Record<string, any>, expiresInMs: number = 7 * 
 }
 
 /**
- * Verifies a JWT token with HMAC-SHA256 and checks expiration
+ * Verifies a JWT token with HMAC-SHA256 and checks expiration.
+ * Fails closed if the authoritative server secret is missing or insufficiently secure.
  */
 export function verifyJwt<T = any>(token: string): T | null {
   try {
@@ -72,6 +87,9 @@ export function verifyJwt<T = any>(token: string): T | null {
     if (parts.length !== 3) return null;
     const [header, claims, signature] = parts;
     const secret = getAuthSecret();
+    if (!secret) {
+      return null;
+    }
     const expectedSignature = crypto
       .createHmac('sha256', secret)
       .update(`${header}.${claims}`)

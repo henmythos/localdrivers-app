@@ -76,6 +76,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // 2. DEFAULT ACTION: APPROVE DRIVER
+    const reviewedBy = process.env.ADMIN_USERNAME?.trim() || 'Admin';
     await db.execute({
       sql: `UPDATE drivers SET
         status = 'Approved',
@@ -83,11 +84,11 @@ export default async function handler(req: any, res: any) {
         is_online = 1,
         is_hold = 0,
         pending_commission_fee = 0,
-        reviewed_by = 'Ranjith.ceo',
+        reviewed_by = ?,
         reviewed_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?;`,
-      args: [driverId]
+      args: [reviewedBy, driverId]
     });
 
     // Mark all documents as verified
