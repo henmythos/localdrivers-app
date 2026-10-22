@@ -23,6 +23,34 @@ export interface ApiRequestOptions extends RequestInit {
 
 const DEFAULT_TIMEOUT_MS = 20000;
 
+export function getApiBaseUrl(): string {
+  // 1. Explicit Vite env variable override if set
+  const envUrl = (import.meta as any).env?.VITE_API_BASE_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    if ((import.meta as any).env?.MODE !== 'development' || envUrl.includes('localhost')) {
+      return envUrl.trim().replace(/\/$/, '');
+    }
+  }
+
+  // 2. Mobile app / Capacitor native platform detection
+  if (typeof window !== 'undefined') {
+    const isCapacitorNative = !!(window as any).Capacitor?.isNativePlatform?.();
+    const isLocalhostApp =
+      window.location.protocol === 'capacitor:' ||
+      window.location.protocol === 'ionic:' ||
+      (window.location.hostname === 'localhost' && (!window.location.port || window.location.port === '80' || window.location.port === '443'));
+
+    if (isCapacitorNative || isLocalhostApp) {
+      return envUrl && typeof envUrl === 'string' && envUrl.trim()
+        ? envUrl.trim().replace(/\/$/, '')
+        : 'https://localdrivers-app.vercel.app';
+    }
+  }
+
+  // 3. Web browser same-origin relative requests
+  return '';
+}
+
 export async function apiRequest<T = any>(
   url: string,
   options: ApiRequestOptions = {}
@@ -42,8 +70,13 @@ export async function apiRequest<T = any>(
     ...(headers as Record<string, string>),
   };
 
+  const baseUrl = getApiBaseUrl();
+  const targetUrl = (url.startsWith('http://') || url.startsWith('https://'))
+    ? url
+    : `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+
   try {
-    const res = await fetch(url, {
+    const res = await fetch(targetUrl, {
       ...restOptions,
       headers: mergedHeaders,
       signal: controller.signal,

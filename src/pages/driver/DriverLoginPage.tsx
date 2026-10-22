@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Car, Lock, Phone, ArrowRight, ShieldCheck, UserPlus, Loader2 } from 'lucide-react';
+import { Car, Lock, Phone, ArrowRight, ShieldCheck, UserPlus, Loader2, MessageSquare } from 'lucide-react';
 import { authService } from '../../services/auth';
 
 export const DriverLoginPage: React.FC = () => {
@@ -9,7 +9,7 @@ export const DriverLoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [statusMessage, setStatusMessage] = useState<{ type: 'pending' | 'error'; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'pending' | 'error'; text: string; driverCode?: string } | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,6 +31,7 @@ export const DriverLoginPage: React.FC = () => {
         setStatusMessage({
           type: 'pending',
           text: res.error || 'Your application is currently under review by Admin. Once approved, you will be able to log in.',
+          driverCode: res.driverCode,
         });
       } else {
         setStatusMessage({
@@ -73,11 +74,33 @@ export const DriverLoginPage: React.FC = () => {
         </div>
 
         {statusMessage && statusMessage.type === 'pending' && (
-          <div className="p-4 bg-amber-50 text-amber-900 text-xs font-semibold rounded-2xl border border-amber-300 flex items-start gap-3 animate-in fade-in">
-            <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <strong className="block text-amber-950 font-black mb-0.5">Verification Review in Progress</strong>
-              <span>{statusMessage.text}</span>
+          <div className="p-4 bg-amber-50 text-amber-900 text-xs font-semibold rounded-2xl border border-amber-300 space-y-3 animate-in fade-in">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block text-amber-950 font-black mb-0.5">Verification Review in Progress</strong>
+                <span>{statusMessage.text}</span>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-amber-200/60 space-y-2">
+              <a
+                href={`https://wa.me/918500274288?text=Hello%20Localdrivers%20Admin,%20please%20approve%20my%20driver%20application.%20Mobile:%20${encodeURIComponent(identifier.trim())}${statusMessage.driverCode ? `%20(Code:%20${encodeURIComponent(statusMessage.driverCode)})` : ''}.`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2"
+              >
+                <MessageSquare className="w-4 h-4 text-emerald-200" />
+                Request Fast-Track Approval via WhatsApp
+              </a>
+
+              <a
+                href="tel:+918500274288"
+                className="w-full py-2 bg-white hover:bg-amber-100/60 border border-amber-300 text-amber-950 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Phone className="w-3.5 h-3.5 text-amber-700" />
+                Call Support: +91 85002 74288
+              </a>
             </div>
           </div>
         )}

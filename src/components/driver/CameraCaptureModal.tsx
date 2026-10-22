@@ -110,14 +110,28 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     setFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
   };
 
-  // Capture Snapshot onto Canvas
+  // Capture Snapshot onto Canvas with automatic dimension scaling & compression
   const takePhoto = () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
 
     const canvas = canvasRef.current || document.createElement('canvas');
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
+    let width = video.videoWidth || 1280;
+    let height = video.videoHeight || 720;
+    const maxDimension = 1024;
+
+    if (width > maxDimension || height > maxDimension) {
+      if (width > height) {
+        height = Math.round((height * maxDimension) / width);
+        width = maxDimension;
+      } else {
+        width = Math.round((width * maxDimension) / height);
+        height = maxDimension;
+      }
+    }
+
+    canvas.width = width;
+    canvas.height = height;
 
     const ctx = canvas.getContext('2d');
     if (ctx) {
@@ -127,7 +141,8 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         ctx.scale(-1, 1);
       }
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      // Safe, high-clarity 0.75 quality ~80KB to ~120KB per document
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
       setCapturedImage(dataUrl);
     }
   };

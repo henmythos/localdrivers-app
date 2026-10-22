@@ -36,22 +36,26 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // Look up driver in the database
+    // Look up driver in the database by phone, mobile digits, email, ID, or driver code
     const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
     const driverRes = await db.execute({
       sql: `SELECT * FROM drivers WHERE 
         phone = ? OR 
         phone LIKE ? OR 
+        phone LIKE '%' || ? OR
         replace(replace(replace(phone, ' ', ''), '+', ''), '-', '') LIKE ? OR
         email = ? OR
-        id = ?
+        id = ? OR
+        driver_code = ?
         LIMIT 1;`,
       args: [
         cleanInput,
         `%${cleanInput}%`,
+        last10,
         `%${last10}%`,
         cleanInput.toLowerCase(),
-        cleanInput
+        cleanInput,
+        cleanInput.toUpperCase()
       ]
     });
 
@@ -109,8 +113,11 @@ export default async function handler(req: any, res: any) {
       if (!isPasswordValid) {
         const cleanPassDigits = password.toString().replace(/\D/g, '');
         const driverPhoneDigits = (row.phone || '').replace(/\D/g, '');
+        const passLast10 = cleanPassDigits.length >= 10 ? cleanPassDigits.slice(-10) : cleanPassDigits;
+        const phoneLast10 = driverPhoneDigits.length >= 10 ? driverPhoneDigits.slice(-10) : driverPhoneDigits;
 
         if (
+          (passLast10.length === 10 && passLast10 === phoneLast10) ||
           (cleanPassDigits.length >= 10 && driverPhoneDigits.includes(cleanPassDigits)) ||
           password === row.phone ||
           password === row.email

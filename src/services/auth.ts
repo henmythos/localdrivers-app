@@ -62,14 +62,14 @@ export const authService = {
   async loginDriver(
     identifier: string,
     password?: string
-  ): Promise<{ success: boolean; driver?: Driver; error?: string; status?: string }> {
+  ): Promise<{ success: boolean; driver?: Driver; error?: string; status?: string; driverCode?: string }> {
     const cleanId = identifier.trim();
 
     if (!cleanId) {
       return { success: false, error: 'Mobile Number is required' };
     }
 
-    const res = await apiClient.post<{ success: boolean; driver?: Driver; token?: string; error?: string; status?: string }>(
+    const res = await apiClient.post<{ success: boolean; driver?: Driver; token?: string; error?: string; status?: string; driverCode?: string }>(
       '/api/drivers/login',
       { identifier: cleanId, password: password || cleanId },
       { fallbackErrorMessage: 'Driver login service temporarily unavailable. Please retry.' }
@@ -98,6 +98,7 @@ export const authService = {
         success: false,
         error: apiError || 'Your driver application is currently under verification review by Admin. Once approved, you will be able to log in.',
         status: apiStatus || 'Pending',
+        driverCode: res.data?.driverCode,
       };
     }
 

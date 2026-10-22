@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Phone, MapPin, Briefcase, Globe, Car, ShieldCheck, CheckCircle2, ArrowRight, Camera, FileText, Lock, UploadCloud, Eye, Loader2 } from 'lucide-react';
+import { User, Phone, MapPin, Briefcase, Globe, Car, ShieldCheck, CheckCircle2, ArrowRight, Camera, FileText, Lock, UploadCloud, Eye, Loader2, MessageSquare } from 'lucide-react';
 import { driversService } from '../../services/drivers';
 import { CameraCaptureModal } from '../../components/driver/CameraCaptureModal';
 import { compressFileToDataUrl, compressDataUrl } from '../../utils/imageCompressor';
@@ -51,6 +51,7 @@ export const DriverRegisterPage: React.FC = () => {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [submittedPhone, setSubmittedPhone] = useState('');
+  const [submittedCode, setSubmittedCode] = useState('');
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, setUrl: (val: string) => void) => {
     const file = e.target.files?.[0];
@@ -121,21 +122,30 @@ export const DriverRegisterPage: React.FC = () => {
       return;
     }
 
-    const documents = [
-      { id: `doc-photo-${Date.now()}`, type: 'Profile Photo Selfie' as const, status: 'Under Review' as const, url: photoSelfieUrl, uploadedAt: new Date().toISOString() },
-      { id: `doc-aadh-f-${Date.now()}`, type: 'Aadhaar Card (Front)' as const, status: 'Under Review' as const, url: aadhaarFrontUrl, uploadedAt: new Date().toISOString() },
-      { id: `doc-aadh-b-${Date.now()}`, type: 'Aadhaar Card (Back)' as const, status: 'Under Review' as const, url: aadhaarBackUrl, uploadedAt: new Date().toISOString() },
-      { id: `doc-lic-f-${Date.now()}`, type: 'Driving Licence (Front)' as const, status: 'Under Review' as const, url: licenseFrontUrl, uploadedAt: new Date().toISOString() },
-      { id: `doc-lic-b-${Date.now()}`, type: 'Driving Licence (Back)' as const, status: 'Under Review' as const, url: licenseBackUrl, uploadedAt: new Date().toISOString() },
-    ];
-
     setIsSubmitting(true);
     try {
+      // Pre-compress all 5 document images to ensure payload remains ultra-light (< 600 KB total)
+      const [cPhoto, cAadhF, cAadhB, cLicF, cLicB] = await Promise.all([
+        compressDataUrl(photoSelfieUrl, { maxWidth: 1000, maxHeight: 1000, quality: 0.72 }),
+        compressDataUrl(aadhaarFrontUrl, { maxWidth: 1000, maxHeight: 1000, quality: 0.72 }),
+        compressDataUrl(aadhaarBackUrl, { maxWidth: 1000, maxHeight: 1000, quality: 0.72 }),
+        compressDataUrl(licenseFrontUrl, { maxWidth: 1000, maxHeight: 1000, quality: 0.72 }),
+        compressDataUrl(licenseBackUrl, { maxWidth: 1000, maxHeight: 1000, quality: 0.72 }),
+      ]);
+
+      const documents = [
+        { id: `doc-photo-${Date.now()}`, type: 'Profile Photo Selfie' as const, status: 'Under Review' as const, url: cPhoto, uploadedAt: new Date().toISOString() },
+        { id: `doc-aadh-f-${Date.now()}`, type: 'Aadhaar Card (Front)' as const, status: 'Under Review' as const, url: cAadhF, uploadedAt: new Date().toISOString() },
+        { id: `doc-aadh-b-${Date.now()}`, type: 'Aadhaar Card (Back)' as const, status: 'Under Review' as const, url: cAadhB, uploadedAt: new Date().toISOString() },
+        { id: `doc-lic-f-${Date.now()}`, type: 'Driving Licence (Front)' as const, status: 'Under Review' as const, url: cLicF, uploadedAt: new Date().toISOString() },
+        { id: `doc-lic-b-${Date.now()}`, type: 'Driving Licence (Back)' as const, status: 'Under Review' as const, url: cLicB, uploadedAt: new Date().toISOString() },
+      ];
+
       const res = await driversService.registerDriverAsync({
         name: formData.name.trim(),
         phone: formData.phone.trim(),
         email: formData.email.trim() || `${formData.phone.trim()}@localdrivers.in`,
-        photo: photoSelfieUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400',
+        photo: cPhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400',
         rating: 5.0,
         totalTrips: 0,
         startingPrice: 299,
@@ -162,6 +172,7 @@ export const DriverRegisterPage: React.FC = () => {
       }
 
       setSubmittedPhone(formData.phone.trim());
+      setSubmittedCode(res.driverCode || '');
       setIsSubmitted(true);
     } catch (err: any) {
       console.error('[Registration Submission Error]', err);
@@ -189,31 +200,50 @@ export const DriverRegisterPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left space-y-2">
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left space-y-2.5">
             <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               Login Credentials Notice
             </div>
+            {submittedCode && (
+              <div className="text-xs font-bold text-slate-800 flex justify-between items-center">
+                <span>Driver Partner Code:</span>
+                <span className="font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  {submittedCode}
+                </span>
+              </div>
+            )}
             <div className="text-xs font-bold text-slate-800 flex justify-between items-center">
               <span>User ID (Mobile):</span>
-              <span className="font-mono text-brand-700 bg-brand-50 px-2 py-1 rounded border border-brand-200">
+              <span className="font-mono text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
                 {submittedPhone}
               </span>
             </div>
             <div className="text-xs font-bold text-slate-800 flex justify-between items-center">
               <span>Password (Mobile):</span>
-              <span className="font-mono text-brand-700 bg-brand-50 px-2 py-1 rounded border border-brand-200">
+              <span className="font-mono text-brand-700 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
                 {submittedPhone}
               </span>
             </div>
             <p className="text-[11px] text-slate-500 italic mt-1">
-              Once your documents are verified and approved, your profile will be active for customer bookings.
+              Admin review typically completes within 2-4 hours. Once approved, your login is activated for customer bookings.
             </p>
           </div>
 
-          <div className="pt-2">
+          {/* Action Buttons: Fast-Track WhatsApp + Login */}
+          <div className="space-y-2 pt-1">
+            <a
+              href={`https://wa.me/918500274288?text=Hello%20Localdrivers%20Admin,%20I%20have%20submitted%20my%20driver%20partner%20application.%20Mobile:%20${encodeURIComponent(submittedPhone)}%20${submittedCode ? `Code:%20${encodeURIComponent(submittedCode)}` : ''}.%20Please%20verify%20and%20approve%20my%20profile.`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
+            >
+              <MessageSquare className="w-4 h-4 text-emerald-200" />
+              Fast-Track Approval on WhatsApp
+            </a>
+
             <button
               onClick={() => navigate('/driver/login')}
-              className="w-full py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
             >
               Go to Driver Partner Login
               <ArrowRight className="w-4 h-4" />
