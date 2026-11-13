@@ -42,7 +42,7 @@ export const authService = {
       isDriverAuthenticated: !!driver,
       driver,
       isAdminAuthenticated: isAdmin,
-      adminEmail: isAdmin ? 'admin@localdrivers.in' : null,
+      adminEmail: isAdmin ? (localStorage.getItem('localdrivers_admin_email') || 'admin@localdrivers.in') : null,
     };
   },
 
@@ -171,10 +171,37 @@ export const authService = {
     };
   },
 
+  // Authenticate Admin via Clerk Google Sign-In (localdrivers.in@gmail.com)
+  async loginAdminWithClerk(clerkToken: string): Promise<{ success: boolean; error?: string }> {
+    if (!clerkToken) {
+      return { success: false, error: 'Clerk authentication token is required' };
+    }
+
+    const res = await apiClient.post<{ success: boolean; token?: string; error?: string }>(
+      '/api/admin/login',
+      { clerkToken },
+      { fallbackErrorMessage: 'Administrator authentication service temporarily unavailable.' }
+    );
+
+    if (res.success && res.data?.token) {
+      localStorage.setItem(ADMIN_AUTH_KEY, 'true');
+      localStorage.setItem(ADMIN_TOKEN_KEY, res.data.token);
+      localStorage.setItem('localdrivers_admin_username', 'localdrivers.in@gmail.com');
+      localStorage.setItem('localdrivers_admin_email', 'localdrivers.in@gmail.com');
+      return { success: true };
+    }
+
+    return {
+      success: false,
+      error: res.data?.error || res.error || 'Clerk administrator verification failed.',
+    };
+  },
+
   // Logout Admin
   logoutAdmin() {
     localStorage.removeItem(ADMIN_AUTH_KEY);
     localStorage.removeItem(ADMIN_TOKEN_KEY);
     localStorage.removeItem('localdrivers_admin_username');
+    localStorage.removeItem('localdrivers_admin_email');
   }
 };

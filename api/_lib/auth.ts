@@ -16,7 +16,8 @@ export function getAuthSecret(): string {
   const secret =
     cleanEnvValue(process.env.ADMIN_JWT_SECRET) ||
     cleanEnvValue(process.env.AUTH_SECRET) ||
-    cleanEnvValue(process.env.JWT_SECRET);
+    cleanEnvValue(process.env.JWT_SECRET) ||
+    cleanEnvValue(process.env.CLERK_SECRET_KEY);
 
   if (!secret || secret.length < 32) {
     return '';

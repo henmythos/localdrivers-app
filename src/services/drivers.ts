@@ -282,7 +282,7 @@ export const driversService = {
           driver.latitude,
           driver.longitude
         );
-        if (calculated > 0) {
+        if (typeof calculated === 'number' && !isNaN(calculated)) {
           computedDistance = calculated;
         }
       }
@@ -315,7 +315,7 @@ export const driversService = {
         return false;
       }
 
-      if (filters.availableOnly && (!driver.isOnline || driver.isHold || driver.currentWorkStatus === 'on_trip')) {
+      if (filters.availableOnly && (!driver.isOnline || driver.isHold || driver.currentWorkStatus === 'on_trip' || driver.currentWorkStatus === 'assigned')) {
         return false;
       }
 

@@ -142,8 +142,9 @@ export default async function handler(req: any, res: any) {
       const args: any[] = [];
 
       if (idParam) {
-        sql += ` AND id = ?`;
-        args.push(idParam);
+        const cleanCode = String(idParam).replace(/^#/, '');
+        sql += ` AND (id = ? OR driver_code = ? OR driver_code = ?)`;
+        args.push(idParam, idParam, cleanCode);
       } else if (statusParam === 'Approved') {
         // Customer Discovery: Must be Approved, NOT on hold, Explicitly Online, and NOT on active assignment or trip
         sql += ` AND status = 'Approved' AND is_hold = 0 AND is_online = 1 AND (current_work_status IS NULL OR current_work_status = 'available') AND (active_booking_id IS NULL OR active_booking_id = '')`;

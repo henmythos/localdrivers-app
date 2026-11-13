@@ -118,8 +118,9 @@ export default async function handler(req: any, res: any) {
     const args: any[] = [];
 
     if (idParam) {
-      sql += ` AND id = ?`;
-      args.push(idParam);
+      const cleanCode = String(idParam).replace(/^#/, '');
+      sql += ` AND (id = ? OR driver_code = ? OR driver_code = ?)`;
+      args.push(idParam, idParam, cleanCode);
     }
 
     sql += ` ORDER BY created_at DESC;`;

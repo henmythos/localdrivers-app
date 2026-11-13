@@ -368,6 +368,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         if (customerName.trim()) {
           localStorage.setItem('localdrivers_customer_name', customerName.trim());
         }
+        if (customerPhone.trim()) {
+          const cleanPhone = customerPhone.replace(/\D/g, '').slice(-10);
+          if (cleanPhone) {
+            localStorage.setItem('localdrivers_verified_customer_phone', cleanPhone);
+          }
+        }
         setCreatedBooking(res.booking);
         setStep(7); // Confirmation Screen
         onBookingComplete(res.booking);

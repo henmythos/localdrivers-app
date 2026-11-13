@@ -38,6 +38,29 @@ import { ContactPage } from './pages/legal/ContactPage';
 import { AboutPage } from './pages/legal/AboutPage';
 import { CancellationPolicyPage } from './pages/legal/CancellationPolicyPage';
 import { DataDeletionPage } from './pages/legal/DataDeletionPage';
+import { useUser, useAuth } from '@clerk/react';
+import { authService } from './services/auth';
+
+const ClerkAdminSync: React.FC = () => {
+  const { user, isLoaded, isSignedIn } = useUser();
+  const { getToken } = useAuth();
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (isSignedIn && user) {
+      const email = user.primaryEmailAddress?.emailAddress?.toLowerCase();
+      if (email === 'localdrivers.in@gmail.com') {
+        getToken().then(token => {
+          if (token) {
+            authService.loginAdminWithClerk(token).catch(() => {});
+          }
+        });
+      }
+    }
+  }, [isLoaded, isSignedIn, user, getToken]);
+
+  return null;
+};
 
 export const App: React.FC = () => {
   const [userLocation, setUserLocation] = useState<UserLocation>(() => locationService.getStoredLocation());
@@ -54,6 +77,7 @@ export const App: React.FC = () => {
 
   return (
     <BrowserRouter>
+      <ClerkAdminSync />
       <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans">
         
         {/* Header */}

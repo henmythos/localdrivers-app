@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { MapPin, Navigation, X, Check, Search, Compass, Loader2 } from 'lucide-react';
 import { UserLocation } from '../../types';
 import { HYDERABAD_POPULAR_AREAS, locationService } from '../../services/location';
+import { HYDERABAD_LANDMARKS } from '../../services/routing';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 
 interface LocationModalProps {
@@ -86,11 +87,41 @@ export const LocationModal: React.FC<LocationModalProps> = ({
     if (!customInput.trim()) return;
 
     const formattedArea = customInput.trim();
+    const cleanLower = formattedArea.toLowerCase();
+
+    // 1. Try finding match in popular areas
+    const popularMatch = HYDERABAD_POPULAR_AREAS.find(
+      a => a.name.toLowerCase().includes(cleanLower) || cleanLower.includes(a.area.toLowerCase())
+    );
+
+    if (popularMatch) {
+      handleSelectArea(popularMatch);
+      setCustomInput('');
+      return;
+    }
+
+    // 2. Try finding match in Hyderabad landmarks
+    const landmarkMatch = HYDERABAD_LANDMARKS.find(
+      l => l.name.toLowerCase().includes(cleanLower) || l.area.toLowerCase().includes(cleanLower)
+    );
+
+    let lat = 17.4126;
+    let lng = 78.4071;
+    let resolvedAddress = `${formattedArea}, Hyderabad`;
+    let resolvedArea = formattedArea;
+
+    if (landmarkMatch) {
+      lat = landmarkMatch.lat;
+      lng = landmarkMatch.lng;
+      resolvedAddress = `${landmarkMatch.name}, Hyderabad`;
+      resolvedArea = landmarkMatch.area;
+    }
+
     const newLoc: UserLocation = {
-      latitude: 17.4126, // Center Hyderabad default coords if search query
-      longitude: 78.4071,
-      address: `${formattedArea}, Hyderabad`,
-      area: formattedArea,
+      latitude: lat,
+      longitude: lng,
+      address: resolvedAddress,
+      area: resolvedArea,
       city: 'Hyderabad',
       isFallback: false,
     };
@@ -99,6 +130,14 @@ export const LocationModal: React.FC<LocationModalProps> = ({
     setCustomInput('');
     onClose();
   };
+
+  const filteredAreas = customInput.trim()
+    ? HYDERABAD_POPULAR_AREAS.filter(
+        a =>
+          a.name.toLowerCase().includes(customInput.toLowerCase()) ||
+          a.address.toLowerCase().includes(customInput.toLowerCase())
+      )
+    : HYDERABAD_POPULAR_AREAS;
 
   return createPortal(
     <div
@@ -211,7 +250,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              {HYDERABAD_POPULAR_AREAS.map((area) => {
+              {filteredAreas.map((area) => {
                 const isSelected = currentLocation.area.toLowerCase() === area.area.toLowerCase();
                 return (
                   <button

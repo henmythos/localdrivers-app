@@ -79,6 +79,13 @@ export const RouteMap: React.FC<RouteMapProps> = ({
       const layerGroup = L.layerGroup().addTo(map);
       layerGroupRef.current = layerGroup;
       mapInstanceRef.current = map;
+
+      // Invalidate size to ensure crisp rendering inside modals or delayed layouts
+      setTimeout(() => {
+        try {
+          map.invalidateSize();
+        } catch {}
+      }, 250);
     }
 
     return () => {
@@ -220,9 +227,13 @@ export const RouteMap: React.FC<RouteMapProps> = ({
       try {
         const bounds = L.latLngBounds(boundsPoints);
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+        map.invalidateSize();
       } catch {}
     } else if (boundsPoints.length === 1) {
       map.setView(boundsPoints[0], 14);
+      try {
+        map.invalidateSize();
+      } catch {}
     }
   }, [
     pickupCoords,

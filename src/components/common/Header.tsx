@@ -4,6 +4,7 @@ import { Bell, Menu, X, Shield, User, MapPin, ChevronDown, HelpCircle, Briefcase
 import { UserLocation } from '../../types';
 import { ReportDriverModal } from './ReportDriverModal';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
+import { Show, SignInButton, UserButton, useUser } from '@clerk/react';
 
 interface HeaderProps {
   userLocation: UserLocation;
@@ -20,6 +21,8 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
 
   const isDriver = path.startsWith('/driver');
   const isAdmin = path.startsWith('/admin');
+  const { user } = useUser();
+  const isClerkAdmin = user?.primaryEmailAddress?.emailAddress?.toLowerCase() === 'localdrivers.in@gmail.com';
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
@@ -131,6 +134,30 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
             </div>
           )}
 
+          {/* Clerk Auth Controls */}
+          <Show when="signed-in">
+            <div className="flex items-center gap-2">
+              {isClerkAdmin && !isAdmin && (
+                <Link
+                  to="/admin/dashboard"
+                  className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl border border-purple-200 transition-colors"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Admin</span>
+                </Link>
+              )}
+              <UserButton />
+            </div>
+          </Show>
+          <Show when="signed-out">
+            <SignInButton mode="modal">
+              <button className="flex items-center gap-1.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 px-3.5 py-1.5 rounded-xl transition-colors border border-slate-200">
+                <User className="w-3.5 h-3.5 text-slate-700" />
+                <span>Sign In</span>
+              </button>
+            </SignInButton>
+          </Show>
+
           {/* Notification Bell */}
           <button
             onClick={() => {}}
@@ -230,6 +257,41 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
               <Car className="w-4 h-4 text-amber-400" />
               <span>Drive with Us (Partner Register)</span>
             </Link>
+
+            {/* Mobile Clerk Sign In / User Profile */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+              <Show when="signed-in">
+                <div className="flex items-center gap-2.5">
+                  <UserButton />
+                  <div className="text-left">
+                    <span className="text-[10px] text-slate-400 block font-bold">SIGNED IN AS</span>
+                    <span className="text-xs font-bold text-slate-800 truncate block max-w-[190px]">
+                      {user?.primaryEmailAddress?.emailAddress}
+                    </span>
+                  </div>
+                </div>
+                {isClerkAdmin && (
+                  <Link
+                    to="/admin/dashboard"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="text-[11px] font-extrabold text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded-lg border border-purple-200"
+                  >
+                    Admin Console
+                  </Link>
+                )}
+              </Show>
+              <Show when="signed-out">
+                <SignInButton mode="modal">
+                  <button
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="w-full py-2.5 bg-slate-900 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2"
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    <span>Sign in with Google</span>
+                  </button>
+                </SignInButton>
+              </Show>
+            </div>
 
             <div className="flex items-center justify-between px-1 text-[11px] text-slate-400 pt-1">
               <Link

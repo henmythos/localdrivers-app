@@ -607,10 +607,10 @@ export default async function handler(req: any, res: any) {
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ? AND active_booking_id = ?;
             `,
-            args: [driverId, bookingId],
+            args: [canonicalDriverId, bookingId],
           });
         } catch (rollbackErr: any) {
-          console.error(`[DB Rollback Failed] Driver ${driverId} rollback for failed booking ${bookingId}:`, rollbackErr.message);
+          console.error(`[DB Rollback Failed] Driver ${canonicalDriverId} rollback for failed booking ${bookingId}:`, rollbackErr.message);
         }
         throw insertErr;
       }
@@ -619,11 +619,11 @@ export default async function handler(req: any, res: any) {
         id: bookingId,
         customerName: customerName || 'Customer',
         customerPhone,
-        driverId,
+        driverId: canonicalDriverId,
         driverName: String(driverRow.name),
         driverPhone: String(driverRow.phone),
         driverPhoto: String(driverRow.photo || ''),
-        driverCode: String(driverRow.driver_code || ''),
+        driverCode: canonicalDriverCode,
         serviceTitle: serviceTitle || 'City Driver',
         status: 'Pending',
         pickupLocation,

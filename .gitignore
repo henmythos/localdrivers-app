@@ -37,4 +37,6 @@ yarn-error.log*
 *.db
 *.db-journal
 .storage/
+.clerk/
+
 

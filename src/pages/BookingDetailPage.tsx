@@ -86,6 +86,18 @@ export const BookingDetailPage: React.FC = () => {
       }
     }
 
+    // 4. Booking created on this device
+    const rawIds = localStorage.getItem('localdrivers_customer_booking_ids');
+    if (rawIds) {
+      try {
+        const ids = JSON.parse(rawIds);
+        if (Array.isArray(ids) && ids.includes(targetBooking.id)) {
+          setIsAuthorized(true);
+          return;
+        }
+      } catch {}
+    }
+
     setIsAuthorized(false);
   };
 
