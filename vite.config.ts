@@ -100,6 +100,7 @@ export default defineConfig(({ mode }) => {
   Object.assign(process.env, env);
 
   return {
+    base: './',
     plugins: [react(), apiDevPlugin()],
     resolve: {
       alias: {
