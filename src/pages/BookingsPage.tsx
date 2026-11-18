@@ -106,6 +106,13 @@ export const BookingsPage: React.FC = () => {
             Driver En Route
           </span>
         );
+      case 'In Progress':
+        return (
+          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+            Trip In Progress
+          </span>
+        );
       case 'Completed':
         return (
           <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">

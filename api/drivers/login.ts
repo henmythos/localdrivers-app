@@ -1,5 +1,5 @@
 import { initDb } from '../_lib/db.js';
-import { verifyPassword, hashPassword, generateToken } from '../_lib/auth.js';
+import { verifyPassword, hashPassword, generateToken, cleanEnvValue } from '../_lib/auth.js';
 
 export default async function handler(req: any, res: any) {
   const reqId = `lgn-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -24,50 +24,110 @@ export default async function handler(req: any, res: any) {
   try {
     const db = await initDb();
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-    const { identifier = '', phone = '', email = '', username = '', password = '' } = body;
-    const cleanInput = (identifier || phone || email || username || '').toString().trim();
-    const cleanDigits = cleanInput.replace(/\D/g, '');
+    const { identifier = '', phone = '', email = '', username = '', password = '', clerkToken = '' } = body;
 
-    if (!cleanInput) {
-      return res.status(400).json({
-        success: false,
-        error: 'Mobile Number or Email is required.',
-        requestId: reqId,
+    let row: any = null;
+    let isClerkVerified = false;
+
+    if (clerkToken && typeof clerkToken === 'string') {
+      // Clerk Google Sign-In flow for Driver Partners
+      try {
+        const { verifyToken, createClerkClient } = await import('@clerk/backend');
+        const secretKey = cleanEnvValue(process.env.CLERK_SECRET_KEY);
+        if (!secretKey) {
+          return res.status(500).json({
+            success: false,
+            error: 'Server CLERK_SECRET_KEY is not configured for Google Driver Sign-In.',
+            requestId: reqId,
+          });
+        }
+
+        const verified = await verifyToken(clerkToken, { secretKey });
+        const clerkClient = createClerkClient({ secretKey });
+        const clerkUser = await clerkClient.users.getUser(verified.sub);
+        const userEmails = clerkUser.emailAddresses
+          .map((e) => e.emailAddress.trim().toLowerCase())
+          .filter(Boolean);
+
+        if (userEmails.length === 0) {
+          return res.status(400).json({
+            success: false,
+            error: 'No email address associated with this Google account.',
+            requestId: reqId,
+          });
+        }
+
+        const placeholders = userEmails.map(() => '?').join(', ');
+        const clerkDriverRes = await db.execute({
+          sql: `SELECT * FROM drivers WHERE LOWER(email) IN (${placeholders}) ORDER BY updated_at DESC LIMIT 1;`,
+          args: userEmails,
+        });
+
+        if (clerkDriverRes.rows.length === 0) {
+          return res.status(404).json({
+            success: false,
+            status: 'NotRegistered',
+            email: userEmails[0],
+            error: 'No driver onboarding application found for this Google account. Please complete Driver Onboarding first.',
+            requestId: reqId,
+          });
+        }
+
+        row = clerkDriverRes.rows[0];
+        isClerkVerified = true;
+      } catch (clerkErr: any) {
+        console.error(`[Driver Clerk Login Error ${reqId}]:`, clerkErr.message || clerkErr);
+        return res.status(401).json({
+          success: false,
+          error: `Google authentication failed: ${clerkErr.message || 'Invalid session token'}`,
+          requestId: reqId,
+        });
+      }
+    } else {
+      const cleanInput = (identifier || phone || email || username || '').toString().trim();
+      const cleanDigits = cleanInput.replace(/\D/g, '');
+
+      if (!cleanInput) {
+        return res.status(400).json({
+          success: false,
+          error: 'Mobile Number or Email is required.',
+          requestId: reqId,
+        });
+      }
+
+      // Look up driver in the database by phone, mobile digits, email, ID, or driver code
+      const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+      const driverRes = await db.execute({
+        sql: `SELECT * FROM drivers WHERE 
+          phone = ? OR 
+          phone LIKE ? OR 
+          phone LIKE '%' || ? OR
+          replace(replace(replace(phone, ' ', ''), '+', ''), '-', '') LIKE ? OR
+          LOWER(email) = ? OR
+          id = ? OR
+          driver_code = ?
+          LIMIT 1;`,
+        args: [
+          cleanInput,
+          `%${cleanInput}%`,
+          last10,
+          `%${last10}%`,
+          cleanInput.toLowerCase(),
+          cleanInput,
+          cleanInput.toUpperCase()
+        ]
       });
+
+      if (driverRes.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Driver account not found with this Mobile Number. Please complete registration first.',
+          requestId: reqId,
+        });
+      }
+
+      row = driverRes.rows[0];
     }
-
-    // Look up driver in the database by phone, mobile digits, email, ID, or driver code
-    const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
-    const driverRes = await db.execute({
-      sql: `SELECT * FROM drivers WHERE 
-        phone = ? OR 
-        phone LIKE ? OR 
-        phone LIKE '%' || ? OR
-        replace(replace(replace(phone, ' ', ''), '+', ''), '-', '') LIKE ? OR
-        email = ? OR
-        id = ? OR
-        driver_code = ?
-        LIMIT 1;`,
-      args: [
-        cleanInput,
-        `%${cleanInput}%`,
-        last10,
-        `%${last10}%`,
-        cleanInput.toLowerCase(),
-        cleanInput,
-        cleanInput.toUpperCase()
-      ]
-    });
-
-    if (driverRes.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Driver account not found with this Mobile Number. Please complete registration first.',
-        requestId: reqId,
-      });
-    }
-
-    const row: any = driverRes.rows[0];
 
     // Status checks derived strictly from database record
     if (row.status === 'Pending') {
@@ -76,6 +136,9 @@ export default async function handler(req: any, res: any) {
         status: 'Pending',
         driverId: row.id,
         driverCode: row.driver_code,
+        driverName: row.name,
+        phone: row.phone,
+        email: row.email,
         error: `Your driver profile (${row.name}) is currently under verification review by Admin. Once approved, you will be able to log in.`,
         requestId: reqId,
       });
@@ -88,13 +151,15 @@ export default async function handler(req: any, res: any) {
         status: 'Rejected',
         driverId: row.id,
         driverCode: row.driver_code,
-        error: `Your driver partner application was not approved.${reasonMsg} Please contact support at 8500274288.`,
+        driverName: row.name,
+        rejectionReason: row.rejection_reason || '',
+        error: `Your driver partner application was not approved.${reasonMsg} Please update your documents or contact support at 8500274288.`,
         requestId: reqId,
       });
     }
 
-    // For Approved drivers, verify password
-    if (row.status === 'Approved') {
+    // For Approved drivers, verify password (unless already verified via Clerk Google Sign-In)
+    if (row.status === 'Approved' && !isClerkVerified) {
       if (!password || !password.toString().trim()) {
         return res.status(401).json({
           success: false,

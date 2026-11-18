@@ -1,6 +1,6 @@
 import { initDb } from '../_lib/db.js';
 import { uploadFileBuffer, parseDataUrl } from '../_lib/storage.js';
-import { hashPassword } from '../_lib/auth.js';
+import { hashPassword, cleanEnvValue } from '../_lib/auth.js';
 
 function generateDriverCode(): string {
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -43,6 +43,7 @@ export default async function handler(req: any, res: any) {
       phone,
       email,
       password,
+      clerkToken,
       area = 'Hyderabad',
       city = 'Hyderabad',
       experienceYears = 1,
@@ -53,6 +54,33 @@ export default async function handler(req: any, res: any) {
       documents = [],
       photo = '',
     } = body;
+
+    // 0. Optional Clerk Google Token Verification (authoritative email identity)
+    let verifiedGoogleEmail = '';
+    if (clerkToken && typeof clerkToken === 'string') {
+      const secretKey = cleanEnvValue(process.env.CLERK_SECRET_KEY);
+      if (secretKey) {
+        try {
+          const { verifyToken, createClerkClient } = await import('@clerk/backend');
+          const verified = await verifyToken(clerkToken, { secretKey });
+          const clerkClient = createClerkClient({ secretKey });
+          const clerkUser = await clerkClient.users.getUser(verified.sub);
+          const primaryObj = clerkUser.emailAddresses.find(
+            (e) => e.id === clerkUser.primaryEmailAddressId
+          ) || clerkUser.emailAddresses[0];
+          if (primaryObj?.emailAddress) {
+            verifiedGoogleEmail = primaryObj.emailAddress.trim().toLowerCase();
+          }
+        } catch (clerkErr: any) {
+          console.error(`[API Register Clerk Verify Error ${reqId}]:`, clerkErr.message || clerkErr);
+          return res.status(401).json({
+            success: false,
+            error: 'Google account verification failed. Please sign in with Google again and retry.',
+            requestId: reqId,
+          });
+        }
+      }
+    }
 
     // 1. Validation
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -76,17 +104,28 @@ export default async function handler(req: any, res: any) {
       ? `+91 ${cleanPhoneDigits.slice(0, 5)} ${cleanPhoneDigits.slice(5)}`
       : `+${cleanPhoneDigits}`;
 
+    const resolvedEmail = verifiedGoogleEmail || (email ? String(email).trim().toLowerCase() : '') || `${cleanPhoneDigits}@localdrivers.in`;
+
     const maskedPhone = `******${cleanPhoneDigits.slice(-4)}`;
     console.log(`[API Register ${reqId}] Processing application for: ${name.trim().slice(0, 15)} (Phone: ${maskedPhone})`);
 
-    // 2. Check for existing driver with same phone number
+    // 2. Check for existing driver with same phone number or verified Google email
     const last10 = cleanPhoneDigits.slice(-10);
-    const existingCheck = await db.execute({
-      sql: `SELECT id, driver_code, status, name FROM drivers WHERE 
-        phone = ? OR 
-        replace(replace(replace(phone, ' ', ''), '+', ''), '-', '') LIKE ?;`,
-      args: [standardPhone, `%${last10}%`]
-    });
+    const hasRealEmail = resolvedEmail && !resolvedEmail.endsWith('@localdrivers.in');
+    const existingCheck = hasRealEmail
+      ? await db.execute({
+          sql: `SELECT id, driver_code, status, name FROM drivers WHERE 
+            phone = ? OR 
+            replace(replace(replace(phone, ' ', ''), '+', ''), '-', '') LIKE ? OR
+            LOWER(email) = ?;`,
+          args: [standardPhone, `%${last10}%`, resolvedEmail]
+        })
+      : await db.execute({
+          sql: `SELECT id, driver_code, status, name FROM drivers WHERE 
+            phone = ? OR 
+            replace(replace(replace(phone, ' ', ''), '+', ''), '-', '') LIKE ?;`,
+          args: [standardPhone, `%${last10}%`]
+        });
 
     let driverId = `drv-${Date.now()}`;
     let driverCode = generateDriverCode();
@@ -97,7 +136,7 @@ export default async function handler(req: any, res: any) {
       if (existing.status === 'Approved') {
         return res.status(409).json({
           success: false,
-          error: `An active account for ${existing.name} with this mobile number already exists and is Approved. Please proceed to Driver Login.`,
+          error: `An active account for ${existing.name} with this Google account or mobile number already exists and is Approved. Please proceed to Driver Login.`,
           requestId: reqId,
         });
       }
@@ -179,6 +218,7 @@ export default async function handler(req: any, res: any) {
       await db.execute({
         sql: `UPDATE drivers SET
           name = ?,
+          phone = ?,
           email = ?,
           password_hash = COALESCE(?, password_hash),
           salt = COALESCE(?, salt),
@@ -195,7 +235,8 @@ export default async function handler(req: any, res: any) {
         WHERE id = ?;`,
         args: [
           name.trim(),
-          email?.trim() || `${cleanPhoneDigits}@localdrivers.in`,
+          standardPhone,
+          resolvedEmail,
           passwordHash || null,
           salt || null,
           savedPhotoUrl || '',
@@ -237,7 +278,7 @@ export default async function handler(req: any, res: any) {
           driverCode,
           name.trim(),
           standardPhone,
-          email?.trim() || `${cleanPhoneDigits}@localdrivers.in`,
+          resolvedEmail,
           passwordHash,
           salt,
           savedPhotoUrl || '',

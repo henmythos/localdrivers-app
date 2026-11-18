@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { 
   CheckCircle2, XCircle, ArrowLeft, ShieldCheck, Clock, 
   FileText, Phone, MapPin, Eye, Sparkles, Lock, Maximize2, X,
-  Loader2, RefreshCw, AlertCircle
+  Loader2, RefreshCw, AlertCircle, Mail
 } from 'lucide-react';
 import { Driver } from '../../types';
 import { driversService } from '../../services/drivers';
@@ -185,6 +185,15 @@ export const AdminPendingDriversPage: React.FC = () => {
                         <Phone className="w-3.5 h-3.5 text-slate-400" />
                         {driver.phone}
                       </span>
+                      {driver.email && !driver.email.endsWith('@localdrivers.in') && (
+                        <>
+                          <span>•</span>
+                          <span className="flex items-center gap-1 font-semibold text-emerald-700">
+                            <Mail className="w-3.5 h-3.5 text-emerald-500" />
+                            {driver.email}
+                          </span>
+                        </>
+                      )}
                       <span>•</span>
                       <span className="flex items-center gap-1 font-semibold text-slate-800">
                         <MapPin className="w-3.5 h-3.5 text-slate-400" />

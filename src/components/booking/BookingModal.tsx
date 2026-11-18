@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -41,22 +41,29 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [customerName, setCustomerName] = useState(() => localStorage.getItem('localdrivers_customer_name') || '');
   const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('localdrivers_verified_customer_phone') || '');
   
-  // Locations and Coordinates
-  const [pickupLocation, setPickupLocation] = useState(() => {
-    try {
-      const stored = localStorage.getItem('localdrivers_user_location');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.address && !parsed.isFallback) return parsed.address;
-      }
-    } catch {}
-    return 'Road No. 36, Jubilee Hills, Hyderabad';
-  });
+  // Locations and Coordinates (sync both address AND coordinates from stored user location)
+  const initialStoredLocation = locationService.getStoredLocation();
+  const hasExplicitStoredPickup = Boolean(
+    initialStoredLocation?.address &&
+    !initialStoredLocation.isFallback &&
+    initialStoredLocation.latitude &&
+    initialStoredLocation.longitude
+  );
 
-  const [pickupCoords, setPickupCoords] = useState<{ latitude: number; longitude: number }>({
-    latitude: 17.4319,
-    longitude: 78.4073,
-  });
+  const [pickupLocation, setPickupLocation] = useState(() =>
+    hasExplicitStoredPickup
+      ? initialStoredLocation.address
+      : 'Road No. 36, Jubilee Hills, Hyderabad'
+  );
+
+  const [pickupCoords, setPickupCoords] = useState<{ latitude: number; longitude: number }>(() =>
+    hasExplicitStoredPickup
+      ? { latitude: initialStoredLocation.latitude, longitude: initialStoredLocation.longitude }
+      : { latitude: 17.4319, longitude: 78.4073 }
+  );
+
+  // Guard against background mount GPS overwriting a customer's chosen or typed pickup location
+  const userEditedPickupRef = useRef<boolean>(hasExplicitStoredPickup);
 
   const [destinationLocation, setDestinationLocation] = useState('Inorbit Mall, Madhapur, Hyderabad');
   const [destinationCoords, setDestinationCoords] = useState<{ latitude: number; longitude: number }>({
@@ -98,17 +105,20 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
 
-  // Automatically detect customer location by permission on mount
+  // Automatically detect customer location by permission on mount ONLY if user hasn't already chosen/edited a pickup location
   useEffect(() => {
+    if (userEditedPickupRef.current) return;
     if (!('geolocation' in navigator)) return;
 
+    let isMounted = true;
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        if (!isMounted || userEditedPickupRef.current) return;
         const lat = Number(pos.coords.latitude.toFixed(5));
         const lng = Number(pos.coords.longitude.toFixed(5));
         try {
           const resolved = await locationService.reverseGeocode(lat, lng);
-          if (resolved?.address) {
+          if (isMounted && !userEditedPickupRef.current && resolved?.address) {
             setPickupCoords({ latitude: lat, longitude: lng });
             setPickupLocation(resolved.address);
           }
@@ -119,6 +129,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       },
       { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 }
     );
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Auto-calculate Road Route via OSRM whenever points or return-trip setting changes
@@ -160,8 +174,17 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       if (geo.source === 'gps') {
         const resolved = await locationService.reverseGeocode(geo.latitude, geo.longitude);
         const resolvedAddr = resolved?.address || geo.address || `Current Location (${geo.latitude}, ${geo.longitude})`;
+        userEditedPickupRef.current = true;
         setPickupCoords({ latitude: geo.latitude, longitude: geo.longitude });
         setPickupLocation(resolvedAddr);
+        locationService.saveLocation({
+          latitude: geo.latitude,
+          longitude: geo.longitude,
+          address: resolvedAddr,
+          area: resolved?.area || resolvedAddr.split(',')[0] || 'Hyderabad',
+          city: resolved?.city || 'Hyderabad',
+          isFallback: false,
+        });
       } else {
         alert(geo.address || 'Unable to access GPS location. Please select on the map or type your address.');
       }
@@ -176,16 +199,27 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     coords: { latitude: number; longitude: number }
   ) => {
     let readable = `Map Location (${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)})`;
+    let resolvedArea = 'Hyderabad';
     try {
       const resolved = await locationService.reverseGeocode(coords.latitude, coords.longitude);
       if (resolved?.address) {
         readable = resolved.address;
+        resolvedArea = resolved.area || 'Hyderabad';
       }
     } catch {}
 
     if (type === 'pickup') {
+      userEditedPickupRef.current = true;
       setPickupCoords(coords);
       setPickupLocation(readable);
+      locationService.saveLocation({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        address: readable,
+        area: resolvedArea,
+        city: 'Hyderabad',
+        isFallback: false,
+      });
     } else if (type === 'destination') {
       setDestinationCoords(coords);
       setDestinationLocation(readable);
@@ -633,10 +667,22 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 <LocationSearchInput
                   label="Pickup Address"
                   value={pickupLocation}
-                  onChange={setPickupLocation}
+                  onChange={val => {
+                    userEditedPickupRef.current = true;
+                    setPickupLocation(val);
+                  }}
                   onSelectLocation={point => {
+                    userEditedPickupRef.current = true;
                     setPickupCoords({ latitude: point.latitude, longitude: point.longitude });
                     setPickupLocation(point.address);
+                    locationService.saveLocation({
+                      latitude: point.latitude,
+                      longitude: point.longitude,
+                      address: point.address,
+                      area: point.address.split(',')[0] || 'Hyderabad',
+                      city: 'Hyderabad',
+                      isFallback: false,
+                    });
                   }}
                   onUseGps={handleUseGpsForPickup}
                   isGpsLoading={isGpsLocating}

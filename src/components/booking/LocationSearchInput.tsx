@@ -43,12 +43,13 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [hasInteracted, setHasInteracted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastSelectedValueRef = useRef<string>(value);
 
   // Debounced search-as-you-type
   useEffect(() => {
     if (!hasInteracted) return;
     const clean = value.trim();
-    if (clean.length < 2) {
+    if (clean.length < 2 || clean === lastSelectedValueRef.current.trim()) {
       setSuggestions([]);
       setIsOpen(false);
       return;
@@ -88,10 +89,32 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
   }, []);
 
   const handleSelect = (item: RoutePoint) => {
+    lastSelectedValueRef.current = item.address;
     onChange(item.address);
     onSelectLocation(item);
     setIsOpen(false);
     setSuggestions([]);
+  };
+
+  const handleBlur = async () => {
+    const clean = value.trim();
+    // Resolve typed address automatically if user typed a new address without clicking a dropdown item
+    if (hasInteracted && clean.length >= 3 && clean !== lastSelectedValueRef.current.trim()) {
+      setTimeout(async () => {
+        if (clean === lastSelectedValueRef.current.trim()) return;
+        try {
+          const resolved = await routingService.geocodeAddress(clean);
+          if (resolved) {
+            lastSelectedValueRef.current = clean;
+            onSelectLocation({
+              latitude: resolved.latitude,
+              longitude: resolved.longitude,
+              address: clean,
+            });
+          }
+        } catch {}
+      }, 180);
+    }
   };
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -113,6 +136,7 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
   };
 
   const handleClear = () => {
+    lastSelectedValueRef.current = '';
     onChange('');
     setSuggestions([]);
     setIsOpen(false);
@@ -190,6 +214,7 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
             setHasInteracted(true);
             if (suggestions.length > 0) setIsOpen(true);
           }}
+          onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 shadow-sm transition-all"
@@ -216,11 +241,14 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
               type="button"
               onClick={async () => {
                 setHasInteracted(true);
+                lastSelectedValueRef.current = qp.query;
                 onChange(qp.query);
                 setIsLoading(true);
                 const point = await routingService.geocodeAddress(qp.query);
                 setIsLoading(false);
                 if (point) {
+                  lastSelectedValueRef.current = point.address;
+                  onChange(point.address);
                   onSelectLocation(point);
                 }
               }}
@@ -248,6 +276,10 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
               <button
                 key={`${item.latitude}-${item.longitude}-${idx}`}
                 type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSelect(item);
+                }}
                 onClick={() => handleSelect(item)}
                 className="w-full px-3 py-2 text-left hover:bg-brand-50/70 flex items-start gap-2.5 transition-colors group"
               >

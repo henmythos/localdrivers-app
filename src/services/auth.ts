@@ -126,6 +126,81 @@ export const authService = {
     return { success: false, error: 'Login failed. Please retry.' };
   },
 
+  // Driver Login / Status Check via Clerk Google Sign-In
+  async loginDriverWithClerk(clerkToken: string): Promise<{
+    success: boolean;
+    driver?: Driver;
+    error?: string;
+    status?: 'Approved' | 'Pending' | 'Rejected' | 'NotRegistered' | string;
+    driverCode?: string;
+    driverName?: string;
+    phone?: string;
+    rejectionReason?: string;
+  }> {
+    if (!clerkToken) {
+      return { success: false, error: 'Google sign-in token is required.' };
+    }
+
+    const res = await apiClient.post<{
+      success: boolean;
+      driver?: Driver;
+      token?: string;
+      error?: string;
+      status?: string;
+      driverCode?: string;
+      driverName?: string;
+      phone?: string;
+      rejectionReason?: string;
+    }>(
+      '/api/drivers/login',
+      { clerkToken },
+      { fallbackErrorMessage: 'Driver authentication service temporarily unavailable. Please retry.' }
+    );
+
+    if (res.success && res.data?.driver) {
+      const driver = res.data.driver;
+      localStorage.setItem(DRIVER_AUTH_KEY, driver.id);
+      if (res.data.token) {
+        localStorage.setItem('localdrivers_driver_token', res.data.token);
+      }
+      try {
+        localStorage.setItem(DRIVER_SESSION_KEY, JSON.stringify(driver));
+      } catch (err: any) {
+        console.warn('[authService] Local session quota notice:', err.message);
+      }
+      dbService.updateDriver(driver.id, driver);
+      return { success: true, driver, status: 'Approved' };
+    }
+
+    const apiStatus = res.data?.status;
+    const apiError = res.data?.error || res.error;
+
+    if (res.status === 404 || apiStatus === 'NotRegistered') {
+      return {
+        success: false,
+        status: 'NotRegistered',
+        error: apiError || 'No driver onboarding profile found for this Google account. Please complete Driver Onboarding first.',
+      };
+    }
+
+    if (res.status === 403 || apiStatus === 'Pending' || apiStatus === 'Rejected') {
+      return {
+        success: false,
+        status: apiStatus || 'Pending',
+        driverCode: res.data?.driverCode,
+        driverName: res.data?.driverName,
+        phone: res.data?.phone,
+        rejectionReason: res.data?.rejectionReason,
+        error: apiError || 'Your driver application is currently under verification review by Admin.',
+      };
+    }
+
+    return {
+      success: false,
+      error: apiError || 'Google driver authentication failed. Please retry.',
+    };
+  },
+
   // Logout Driver
   logoutDriver() {
     localStorage.removeItem(DRIVER_AUTH_KEY);

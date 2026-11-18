@@ -9,7 +9,7 @@ import {
 import { Driver, Booking } from '../../types';
 import { authService } from '../../services/auth';
 import { driversService } from '../../services/drivers';
-import { bookingsService } from '../../services/bookings';
+import { bookingsService, parseUtcTimestampMs } from '../../services/bookings';
 import { dbService } from '../../services/database';
 import { gpsService } from '../../services/gps';
 import { billingService } from '../../services/billing';
@@ -98,6 +98,8 @@ export const DriverDashboardPage: React.FC = () => {
 
   // Track known pending requests to avoid repetitive chime looping
   const prevPendingIdsRef = useRef<Set<string>>(new Set());
+  // Prevent duplicate auto-pass calls for the same pending booking
+  const passedBookingIdsRef = useRef<Set<string>>(new Set());
 
   // Trip Start & End Modals State
   const [startTripBooking, setStartTripBooking] = useState<Booking | null>(null);
@@ -210,12 +212,16 @@ export const DriverDashboardPage: React.FC = () => {
     const pending = driverBookings.filter(b => b.status === 'Pending');
     if (pending.length === 0) return;
     pending.forEach(req => {
-      const assignedTime = new Date(req.assignedAt || req.createdAt).getTime();
+      if (passedBookingIdsRef.current.has(req.id)) return;
+      const assignedTime = parseUtcTimestampMs(req.assignedAt || req.createdAt);
       const elapsedSeconds = Math.floor((nowTimestamp - assignedTime) / 1000);
       if (elapsedSeconds >= 60) {
+        passedBookingIdsRef.current.add(req.id);
         bookingsService.passToNextDriverAsync(req.id).then(() => {
           loadData();
-        }).catch(() => {});
+        }).catch(() => {
+          passedBookingIdsRef.current.delete(req.id);
+        });
       }
     });
   }, [nowTimestamp, driverBookings, driver]);
@@ -778,7 +784,7 @@ export const DriverDashboardPage: React.FC = () => {
                 ? `+91 ${cleanDigits.slice(-10, -6)}* *****`
                 : '+91 ***** *****';
 
-              const assignedTime = new Date(req.assignedAt || req.createdAt).getTime();
+              const assignedTime = parseUtcTimestampMs(req.assignedAt || req.createdAt);
               const elapsedSeconds = Math.floor((nowTimestamp - assignedTime) / 1000);
               const remainingSec = Math.max(0, 60 - elapsedSeconds);
               const progressPct = Math.min(100, Math.max(0, (remainingSec / 60) * 100));

@@ -127,7 +127,6 @@ export const locationService = {
         {
           headers: {
             'Accept-Language': 'en',
-            'User-Agent': 'LocaldriversApp/1.0',
           },
           signal: controller.signal,
         }
@@ -161,7 +160,30 @@ export const locationService = {
       console.warn('Reverse geocoding network call failed or timed out:', err);
     }
 
-    // Fallback if reverse geocoding fails network call
+    // Fallback: match nearest known Hyderabad area if within ~15km instead of raw coordinates
+    let nearestArea = HYDERABAD_POPULAR_AREAS[0];
+    let minSqDist = Infinity;
+    for (const item of HYDERABAD_POPULAR_AREAS) {
+      const dLat = item.lat - lat;
+      const dLng = item.lng - lng;
+      const sqDist = dLat * dLat + dLng * dLng;
+      if (sqDist < minSqDist) {
+        minSqDist = sqDist;
+        nearestArea = item;
+      }
+    }
+
+    if (minSqDist <= 0.025) {
+      return {
+        latitude: lat,
+        longitude: lng,
+        address: `Near ${nearestArea.name}, Hyderabad`,
+        area: nearestArea.area,
+        city: 'Hyderabad',
+        isFallback: false,
+      };
+    }
+
     return {
       latitude: lat,
       longitude: lng,

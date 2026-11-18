@@ -5,19 +5,24 @@ import { authService } from './auth';
 
 const MY_BOOKINGS_STORAGE_KEY = 'localdrivers_customer_booking_ids';
 
+// Parse ISO-8601 or SQLite 'YYYY-MM-DD HH:MM:SS' (UTC) timestamps accurately across all timezones
+export function parseUtcTimestampMs(ts?: string): number {
+  if (!ts) return Date.now();
+  const str = String(ts).trim();
+  if (!str) return Date.now();
+  const normalized =
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(str) && !str.endsWith('Z')
+      ? str.replace(' ', 'T') + 'Z'
+      : str;
+  const parsed = new Date(normalized).getTime();
+  return Number.isNaN(parsed) ? Date.now() : parsed;
+}
+
 export const bookingsService = {
-  // Check and rotate pending bookings older than 20 seconds to next available online driver
+  // Server-authoritative dispatch rotation is managed via explicit 60s countdown / pass action;
+  // avoid mutating live server bookings during read calls.
   checkAndAutoPassPendingBookings(): void {
-    const now = Date.now();
-    const bookings = dbService.getBookings();
-    bookings.forEach(b => {
-      if (b.status === 'Pending') {
-        const assignedTime = new Date(b.assignedAt || b.createdAt).getTime();
-        if ((now - assignedTime) / 1000 >= 20) {
-          dbService.reassignBookingToNextDriver(b.id);
-        }
-      }
-    });
+    // No-op: prevents local clock/timezone drift from silently reassigning live bookings on read
   },
 
   // Get all bookings (for Admin)
@@ -170,14 +175,23 @@ export const bookingsService = {
   },
 
   // Driver Pass / Reject Booking to next online driver (Persists to Server)
-  async passToNextDriverAsync(id: string): Promise<{ success: boolean; error?: string }> {
-    const res = await apiClient.post<{ success: boolean; error?: string }>(
+  async passToNextDriverAsync(id: string): Promise<{ success: boolean; reassigned?: boolean; status?: string; error?: string }> {
+    const res = await apiClient.post<{ success: boolean; reassigned?: boolean; status?: string; error?: string }>(
       '/api/bookings',
       { action: 'pass', bookingId: id },
       { fallbackErrorMessage: 'Failed to pass booking on server.' }
     );
-    dbService.reassignBookingToNextDriver(id);
-    return { success: res.success };
+    if (res.success && res.data?.status === 'Cancelled') {
+      dbService.updateBookingStatus(id, 'Cancelled');
+    } else if (res.success && res.data?.reassigned) {
+      dbService.reassignBookingToNextDriver(id);
+    }
+    return {
+      success: res.success,
+      reassigned: res.data?.reassigned,
+      status: res.data?.status,
+      error: res.error || res.data?.error,
+    };
   },
 
   // Create a new booking (Customer) with server persistence and race safety

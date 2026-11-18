@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
@@ -8,7 +8,7 @@ import {
   HelpCircle, Receipt, ExternalLink, Compass, X 
 } from 'lucide-react';
 import { Booking } from '../types';
-import { bookingsService } from '../services/bookings';
+import { bookingsService, parseUtcTimestampMs } from '../services/bookings';
 import { dbService } from '../services/database';
 import { authService } from '../services/auth';
 import { billingService, formatDuration } from '../services/billing';
@@ -43,6 +43,7 @@ export const BookingDetailPage: React.FC = () => {
   });
 
   const [nowTimestamp, setNowTimestamp] = useState(Date.now());
+  const passedAssignmentKeysRef = useRef<Set<string>>(new Set());
 
   const loadBooking = async () => {
     if (id) {
@@ -109,20 +110,34 @@ export const BookingDetailPage: React.FC = () => {
     const interval = setInterval(() => {
       setNowTimestamp(Date.now());
     }, 1000);
+    // Live server status polling every 5s so customer sees driver acceptance & trip status updates
+    const pollInterval = setInterval(() => {
+      loadBooking();
+    }, 5000);
 
     return () => {
       unsubscribe();
       clearInterval(interval);
+      clearInterval(pollInterval);
     };
   }, [id]);
 
-  // Auto-pass if still pending after 60s
+  // Auto-pass if still pending after 60s (guarded against repeated calls)
   useEffect(() => {
     if (booking && booking.status === 'Pending') {
-      const assignedTime = new Date(booking.assignedAt || booking.createdAt).getTime();
+      const assignKey = `${booking.id}:${booking.assignedAt || booking.createdAt}`;
+      if (passedAssignmentKeysRef.current.has(assignKey)) return;
+
+      const assignedTime = parseUtcTimestampMs(booking.assignedAt || booking.createdAt);
       const elapsedSeconds = Math.floor((nowTimestamp - assignedTime) / 1000);
       if (elapsedSeconds >= 60) {
-        bookingsService.passToNextDriverAsync(booking.id).catch(() => {});
+        passedAssignmentKeysRef.current.add(assignKey);
+        bookingsService
+          .passToNextDriverAsync(booking.id)
+          .then(() => loadBooking())
+          .catch(() => {
+            passedAssignmentKeysRef.current.delete(assignKey);
+          });
       }
     }
   }, [nowTimestamp, booking]);
@@ -309,7 +324,7 @@ export const BookingDetailPage: React.FC = () => {
 
           <div>
             {booking.status === 'Pending' && (() => {
-              const assignedTime = new Date(booking.assignedAt || booking.createdAt).getTime();
+              const assignedTime = parseUtcTimestampMs(booking.assignedAt || booking.createdAt);
               const remainingSec = Math.max(0, 60 - Math.floor((nowTimestamp - assignedTime) / 1000));
               return (
                 <span className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-amber-400 text-amber-950 flex items-center gap-2 shadow-md">

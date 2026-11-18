@@ -1,6 +1,17 @@
 import { initDb } from './_lib/db.js';
 import { verifyAdminAuth } from './_lib/auth.js';
 
+// Normalize SQLite 'YYYY-MM-DD HH:MM:SS' (UTC without Z) into valid ISO-8601 UTC string
+function toIsoUtc(ts: any): string {
+  if (!ts) return '';
+  const str = String(ts).trim();
+  if (!str) return '';
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(str) && !str.endsWith('Z')) {
+    return str.replace(' ', 'T') + 'Z';
+  }
+  return str;
+}
+
 export default async function handler(req: any, res: any) {
   const reqId = `bkg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -35,10 +46,10 @@ export default async function handler(req: any, res: any) {
         sql += ` AND (driver_id = ? OR driver_code = ? OR driver_code = ?)`;
         args.push(driverIdParam, driverIdParam, cleanCode);
       } else if (phoneParam) {
-        // Match last 10 digits
-        const cleanDigits = phoneParam.replace(/\D/g, '').slice(-10);
-        sql += ` AND customer_phone LIKE ?`;
-        args.push(`%${cleanDigits}`);
+        // Match last 10 digits ignoring spaces, +, -, parentheses
+        const cleanDigits = String(phoneParam).replace(/\D/g, '').slice(-10);
+        sql += ` AND (customer_phone LIKE ? OR replace(replace(replace(replace(replace(customer_phone, ' ', ''), '+', ''), '-', ''), '(', ''), ')', '') LIKE ?)`;
+        args.push(`%${cleanDigits}`, `%${cleanDigits}`);
       } else if (!isAdmin) {
         return res.status(401).json({
           success: false,
@@ -55,7 +66,13 @@ export default async function handler(req: any, res: any) {
           if (row.data_json) extraData = JSON.parse(String(row.data_json));
         } catch {}
 
+        const createdAtIso = toIsoUtc(row.created_at) || new Date().toISOString();
+        const updatedAtIso = toIsoUtc(row.updated_at) || createdAtIso;
+        const assignedAtIso = extraData.assignedAt ? toIsoUtc(extraData.assignedAt) : createdAtIso;
+
+        // Spread extraData FIRST so authoritative SQL columns always win
         return {
+          ...extraData,
           id: String(row.id),
           customerName: String(row.customer_name),
           customerPhone: String(row.customer_phone),
@@ -73,16 +90,17 @@ export default async function handler(req: any, res: any) {
           notes: String(row.notes || ''),
           estimatedFare: Number(row.estimated_fare) || 0,
           finalFare: row.final_fare != null ? Number(row.final_fare) : undefined,
-          tripStartTime: row.trip_start_time ? String(row.trip_start_time) : undefined,
-          tripEndTime: row.trip_end_time ? String(row.trip_end_time) : undefined,
+          tripStartTime: row.trip_start_time ? toIsoUtc(row.trip_start_time) : undefined,
+          tripEndTime: row.trip_end_time ? toIsoUtc(row.trip_end_time) : undefined,
           tripDurationMinutes: row.trip_duration_minutes != null ? Number(row.trip_duration_minutes) : undefined,
           waitingDurationMinutes: Number(row.waiting_duration_minutes) || 0,
           startLatitude: row.start_latitude != null ? Number(row.start_latitude) : undefined,
           startLongitude: row.start_longitude != null ? Number(row.start_longitude) : undefined,
           endLatitude: row.end_latitude != null ? Number(row.end_latitude) : undefined,
           endLongitude: row.end_longitude != null ? Number(row.end_longitude) : undefined,
-          createdAt: String(row.created_at || ''),
-          ...extraData,
+          createdAt: createdAtIso,
+          updatedAt: updatedAtIso,
+          assignedAt: assignedAtIso,
         };
       });
 
@@ -240,7 +258,7 @@ export default async function handler(req: any, res: any) {
 
         // Check for conflicting or upcoming assigned bookings
         const nextBkgRes = await db.execute({
-          sql: `SELECT id FROM bookings WHERE driver_id = ? AND status IN ('Assigned', 'In Progress', 'Pending') AND id != ? LIMIT 1`,
+          sql: `SELECT id FROM bookings WHERE driver_id = ? AND status IN ('Assigned', 'Accepted', 'In Progress', 'Pending') AND id != ? LIMIT 1`,
           args: [bkgDriverId, bookingId],
         });
 
@@ -331,9 +349,30 @@ export default async function handler(req: any, res: any) {
         }
 
         const booking = bkgRes.rows[0];
-        const oldDriverId = String(booking.driver_id);
+        if (String(booking.status) !== 'Pending') {
+          return res.status(200).json({
+            success: true,
+            bookingId,
+            status: String(booking.status),
+            message: 'Booking is no longer pending.',
+          });
+        }
 
-        // Find next available online driver
+        const oldDriverId = String(booking.driver_id);
+        let extraData: any = {};
+        try {
+          if (booking.data_json) extraData = JSON.parse(String(booking.data_json));
+        } catch {}
+
+        const rejectedDriverIds: string[] = Array.isArray(extraData.rejectedDriverIds)
+          ? [...extraData.rejectedDriverIds]
+          : [];
+        if (!rejectedDriverIds.includes(oldDriverId)) {
+          rejectedDriverIds.push(oldDriverId);
+        }
+
+        // Find next available online driver excluding all drivers who already passed/rejected
+        const excludePlaceholders = rejectedDriverIds.map(() => '?').join(', ');
         const nextDriverRes = await db.execute({
           sql: `
             SELECT id, name, phone, photo, driver_code 
@@ -342,15 +381,35 @@ export default async function handler(req: any, res: any) {
               AND is_online = 1 
               AND is_hold = 0 
               AND (current_work_status IS NULL OR current_work_status = 'available')
-              AND id != ?
+              AND id NOT IN (${excludePlaceholders})
             LIMIT 1;
           `,
+          args: rejectedDriverIds,
+        });
+
+        const nowIso = new Date().toISOString();
+
+        // Release old driver cleanly (preserve offline status if they went offline)
+        const oldDrvRes = await db.execute({
+          sql: `SELECT is_online, active_booking_id FROM drivers WHERE id = ?`,
           args: [oldDriverId],
         });
+        if (oldDrvRes.rows.length > 0 && oldDrvRes.rows[0].active_booking_id === bookingId) {
+          const oldNextStatus = Boolean(oldDrvRes.rows[0].is_online) ? 'available' : 'offline';
+          await db.execute({
+            sql: `UPDATE drivers SET current_work_status = ?, active_booking_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
+            args: [oldNextStatus, oldDriverId],
+          });
+        }
 
         if (nextDriverRes.rows.length > 0) {
           const nextDrv = nextDriverRes.rows[0];
           const nextDrvId = String(nextDrv.id);
+          const updatedDataJson = JSON.stringify({
+            ...extraData,
+            rejectedDriverIds,
+            assignedAt: nowIso,
+          });
 
           await db.execute({
             sql: `
@@ -360,7 +419,8 @@ export default async function handler(req: any, res: any) {
                   driver_phone = ?, 
                   driver_photo = ?, 
                   driver_code = ?, 
-                  status = 'Pending', 
+                  status = 'Pending',
+                  data_json = ?,
                   updated_at = CURRENT_TIMESTAMP 
               WHERE id = ?;
             `,
@@ -370,6 +430,7 @@ export default async function handler(req: any, res: any) {
               String(nextDrv.phone),
               String(nextDrv.photo || ''),
               String(nextDrv.driver_code || ''),
+              updatedDataJson,
               bookingId,
             ],
           });
@@ -379,18 +440,34 @@ export default async function handler(req: any, res: any) {
             sql: `UPDATE drivers SET current_work_status = 'assigned', active_booking_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
             args: [bookingId, nextDrvId],
           });
+
+          return res.status(200).json({
+            success: true,
+            reassigned: true,
+            bookingId,
+            status: 'Pending',
+            assignedAt: nowIso,
+            newDriverId: nextDrvId,
+            message: 'Booking passed to next available driver.',
+          });
         }
 
-        // Release old driver
+        // No other online drivers available -> Cancel booking cleanly so it does not ghost-loop on the rejecting driver
+        const cancelledDataJson = JSON.stringify({
+          ...extraData,
+          rejectedDriverIds,
+        });
         await db.execute({
-          sql: `UPDATE drivers SET current_work_status = 'available', active_booking_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
-          args: [oldDriverId],
+          sql: `UPDATE bookings SET status = 'Cancelled', data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
+          args: [cancelledDataJson, bookingId],
         });
 
         return res.status(200).json({
           success: true,
+          reassigned: false,
           bookingId,
-          message: 'Booking passed to next available driver.',
+          status: 'Cancelled',
+          message: 'No other online drivers available right now. Booking was cancelled.',
         });
       }
 
@@ -450,6 +527,11 @@ export default async function handler(req: any, res: any) {
       // 3. DEFAULT: CREATE / ASSIGN BOOKING (Atomic & Race-Safe)
       const {
         driverId,
+        driverName: _ignoreDriverName,
+        driverPhone: _ignoreDriverPhone,
+        driverPhoto: _ignoreDriverPhoto,
+        driverCode: _ignoreDriverCode,
+        status: _ignoreStatus,
         customerName,
         customerPhone,
         serviceTitle,
@@ -564,7 +646,11 @@ export default async function handler(req: any, res: any) {
       }
 
       // Insert booking into database with automatic rollback if insert fails
-      const dataJson = JSON.stringify(otherDetails || {});
+      const nowIso = new Date().toISOString();
+      const dataJson = JSON.stringify({
+        ...(otherDetails || {}),
+        assignedAt: nowIso,
+      });
       try {
         await db.execute({
           sql: `
@@ -574,7 +660,7 @@ export default async function handler(req: any, res: any) {
               status, pickup_location, destination_location, date, time,
               notes, estimated_fare, idempotency_key, data_json,
               created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
           `,
           args: [
             bookingId,
@@ -594,6 +680,8 @@ export default async function handler(req: any, res: any) {
             Number(estimatedFare) || 299,
             idempotencyKey || bookingId,
             dataJson,
+            nowIso,
+            nowIso,
           ],
         });
       } catch (insertErr: any) {
@@ -616,6 +704,7 @@ export default async function handler(req: any, res: any) {
       }
 
       const newBooking = {
+        ...(otherDetails || {}),
         id: bookingId,
         customerName: customerName || 'Customer',
         customerPhone,
@@ -632,8 +721,9 @@ export default async function handler(req: any, res: any) {
         time: time || '',
         notes: notes || '',
         estimatedFare: Number(estimatedFare) || 299,
-        createdAt: new Date().toISOString(),
-        ...otherDetails,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        assignedAt: nowIso,
       };
 
       return res.status(201).json({

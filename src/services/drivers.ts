@@ -162,7 +162,7 @@ export const driversService = {
 
   // Register driver with real database persistence
   async registerDriverAsync(
-    input: Parameters<typeof dbService.registerDriver>[0]
+    input: Parameters<typeof dbService.registerDriver>[0] & { clerkToken?: string }
   ): Promise<{ success: boolean; driverId?: string; driverCode?: string; error?: string }> {
     const res = await apiClient.post<{ success: boolean; driverId?: string; driverCode?: string; error?: string }>(
       '/api/drivers/register',
@@ -176,8 +176,9 @@ export const driversService = {
     if (res.success && res.data?.success) {
       // Synchronize with local storage only after backend confirmation
       try {
+        const { clerkToken: _omitToken, ...driverInput } = input;
         dbService.upsertDriver({
-          ...input,
+          ...driverInput,
           id: res.data.driverId || `drv-${Date.now()}`,
           driverCode: res.data.driverCode || 'ABC123',
           status: 'Pending',
