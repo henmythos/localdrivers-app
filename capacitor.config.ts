@@ -22,6 +22,11 @@ const config: CapacitorConfig = {
     StatusBar: {
       style: 'DARK',
       backgroundColor: '#0F172A'
+    },
+    GoogleAuth: {
+      scopes: ['profile', 'email'],
+      serverClientId: '577882724103-bevg4ia8jafh1thjr2dso1t8a6vcicrj.apps.googleusercontent.com',
+      forceCodeForRefreshToken: true
     }
   }
 };
