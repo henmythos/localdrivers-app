@@ -208,7 +208,9 @@ export async function initDb(): Promise<Client> {
       "ALTER TABLE bookings ADD COLUMN payment_method TEXT DEFAULT 'cash';",
       "ALTER TABLE bookings ADD COLUMN payment_status TEXT DEFAULT 'pending';",
       "ALTER TABLE bookings ADD COLUMN vehicle_type TEXT;",
-      "ALTER TABLE bookings ADD COLUMN vehicle_model TEXT;"
+      "ALTER TABLE bookings ADD COLUMN vehicle_model TEXT;",
+      "ALTER TABLE bookings ADD COLUMN customer_email TEXT;",
+      "ALTER TABLE bookings ADD COLUMN customer_id TEXT;"
     ];
 
     for (const alterSql of safeAddBookingColumns) {
@@ -228,8 +230,26 @@ export async function initDb(): Promise<Client> {
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_driver_id ON bookings(driver_id);`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_customer_phone ON bookings(customer_phone);`);
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_customer_email ON bookings(customer_email);`);
 
-    // 4. Admin Users Table
+    // 4. Customers Table (Customer Profile & Booking Data Records)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        name TEXT,
+        phone TEXT,
+        avatar_url TEXT,
+        city TEXT DEFAULT 'Hyderabad',
+        clerk_id TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);`);
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);`);
+
+    // 5. Admin Users Table
     await db.execute(`
       CREATE TABLE IF NOT EXISTS admin_users (
         id TEXT PRIMARY KEY,
@@ -242,7 +262,7 @@ export async function initDb(): Promise<Client> {
       );
     `);
 
-    // 5. App Settings Table (Real-time Fare & Commission Controls)
+    // 6. App Settings Table (Real-time Fare & Commission Controls)
     await db.execute(`
       CREATE TABLE IF NOT EXISTS app_settings (
         key TEXT PRIMARY KEY,
@@ -380,11 +400,30 @@ export async function initDb(): Promise<Client> {
         "ALTER TABLE bookings ADD COLUMN payment_method TEXT DEFAULT 'cash';",
         "ALTER TABLE bookings ADD COLUMN payment_status TEXT DEFAULT 'pending';",
         "ALTER TABLE bookings ADD COLUMN vehicle_type TEXT;",
-        "ALTER TABLE bookings ADD COLUMN vehicle_model TEXT;"
+        "ALTER TABLE bookings ADD COLUMN vehicle_model TEXT;",
+        "ALTER TABLE bookings ADD COLUMN customer_email TEXT;",
+        "ALTER TABLE bookings ADD COLUMN customer_id TEXT;"
       ];
       for (const alterSql of safeAddBookingColumnsLocal) {
         try { await dbClient.execute(alterSql); } catch {}
       }
+
+      await dbClient.execute(`
+        CREATE TABLE IF NOT EXISTS customers (
+          id TEXT PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          name TEXT,
+          phone TEXT,
+          avatar_url TEXT,
+          city TEXT DEFAULT 'Hyderabad',
+          clerk_id TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      try { await dbClient.execute(`CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);`); } catch {}
+      try { await dbClient.execute(`CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);`); } catch {}
+      try { await dbClient.execute(`CREATE INDEX IF NOT EXISTS idx_bookings_customer_email ON bookings(customer_email);`); } catch {}
 
       await dbClient.execute(`
         CREATE TABLE IF NOT EXISTS app_settings (

@@ -16,6 +16,7 @@ import { billingService } from '../../services/billing';
 import { locationService } from '../../services/location';
 import { LocationSearchInput } from './LocationSearchInput';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
+import { useUser, SignInButton } from '@clerk/react';
 
 interface BookingModalProps {
   driver: Driver;
@@ -34,14 +35,33 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 }) => {
   const navigate = useNavigate();
   useBodyScrollLock(true, onClose);
+  const { user, isSignedIn } = useUser();
   const [step, setStep] = useState<number>(1);
 
   // Form State
   const [selectedService, setSelectedService] = useState<ServiceType>(
     preselectedService || driver.services[0] || 'City Driver'
   );
-  const [customerName, setCustomerName] = useState(() => localStorage.getItem('localdrivers_customer_name') || '');
-  const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('localdrivers_verified_customer_phone') || '');
+  const [customerName, setCustomerName] = useState(() => 
+    localStorage.getItem('localdrivers_customer_name') || ''
+  );
+  const [customerPhone, setCustomerPhone] = useState(() => 
+    localStorage.getItem('localdrivers_verified_customer_phone') || ''
+  );
+
+  // Pre-fill customer details from Google account when available
+  useEffect(() => {
+    if (isSignedIn && user) {
+      if (!customerName) {
+        const fullName = user.fullName || user.firstName || '';
+        if (fullName) setCustomerName(fullName);
+      }
+      if (!customerPhone && user.primaryPhoneNumber?.phoneNumber) {
+        const clean = user.primaryPhoneNumber.phoneNumber.replace(/\D/g, '').slice(-10);
+        if (clean) setCustomerPhone(clean);
+      }
+    }
+  }, [isSignedIn, user]);
   
   // Locations and Coordinates (sync both address AND coordinates from stored or prop user location)
   const initialStoredLocation = initialUserLocation || locationService.getStoredLocation();
@@ -349,6 +369,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       serviceTitle: selectedService,
       customerName,
       customerPhone,
+      customerEmail: user?.primaryEmailAddress?.emailAddress || undefined,
+      customerId: user?.id || undefined,
       pickupLocation,
       destinationLocation,
       vehicleType,
@@ -553,6 +575,41 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               <p className="text-xs text-slate-500 mb-4">
                 Required for direct phone connection and trip assignment.
               </p>
+
+              {/* Google Account Association */}
+              <div className="mb-4">
+                {isSignedIn && user ? (
+                  <div className="p-3 bg-sky-50 border border-sky-200 rounded-2xl flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-sky-100 border border-sky-300 flex items-center justify-center shrink-0">
+                        <ShieldCheck className="w-4 h-4 text-sky-700" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold text-sky-800 uppercase block">Google Verified Customer</span>
+                        <span className="text-xs font-bold text-slate-900 truncate block">{user.primaryEmailAddress?.emailAddress}</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-extrabold text-sky-700 bg-white px-2 py-0.5 rounded-full border border-sky-200 shrink-0">
+                      Auto-Linked
+                    </span>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-2.5">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-amber-900">Sign in with Google (Recommended)</p>
+                      <p className="text-[10px] text-amber-700">Link this ride to your Google profile for tax invoices & live tracking.</p>
+                    </div>
+                    <SignInButton mode="modal">
+                      <button
+                        type="button"
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shrink-0 flex items-center gap-1.5 shadow-xs transition-colors"
+                      >
+                        <span>Sign In</span>
+                      </button>
+                    </SignInButton>
+                  </div>
+                )}
+              </div>
 
               <div className="space-y-4">
                 <div>

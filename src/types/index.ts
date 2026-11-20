@@ -155,6 +155,8 @@ export interface Booking {
   serviceTitle: ServiceType;
   customerName: string;
   customerPhone: string;
+  customerEmail?: string;
+  customerId?: string;
   pickupLocation: string;
   destinationLocation: string;
   date: string;
@@ -265,3 +267,22 @@ export interface FilterState {
   minRating: number;
   availableOnly: boolean;
 }
+
+export interface CustomerProfile {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string;
+  avatarUrl?: string;
+  city?: string;
+  clerkId?: string;
+  totalBookings?: number;
+  totalSpent?: number;
+  activeBookings?: number;
+  lastActive?: string;
+  joined?: string;
+  isGuestRider?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+

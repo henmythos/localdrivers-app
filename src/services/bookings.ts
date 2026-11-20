@@ -113,6 +113,33 @@ export const bookingsService = {
     return this.getBookingsByCustomerPhone(phone);
   },
 
+  // Fetch customer bookings live from server by Google email
+  async getBookingsByCustomerEmailAsync(email: string): Promise<Booking[]> {
+    if (!email || !email.trim()) return [];
+    const cleanEmail = email.trim().toLowerCase();
+
+    const res = await apiClient.get<{ bookings: Booking[] }>(
+      `/api/bookings?email=${encodeURIComponent(cleanEmail)}`,
+      {
+        fallbackErrorMessage: 'Unable to retrieve customer bookings by email.',
+      }
+    );
+
+    if (res.success && res.data && Array.isArray(res.data.bookings)) {
+      res.data.bookings.forEach(b => {
+        try {
+          dbService.upsertBooking(b, false);
+        } catch {}
+      });
+      dbService.cleanupDuplicateBookings();
+      return res.data.bookings;
+    }
+
+    // Fallback: match in local storage
+    const all = dbService.getBookings();
+    return all.filter(b => b.customerEmail?.toLowerCase() === cleanEmail);
+  },
+
   // Get customer local bookings remembered on device
   getCustomerBookings(verifiedPhone?: string): Booking[] {
     this.checkAndAutoPassPendingBookings();

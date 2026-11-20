@@ -137,6 +137,14 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
           {/* Clerk Auth Controls */}
           <Show when="signed-in">
             <div className="flex items-center gap-2">
+              <Link
+                to="/customer/profile"
+                className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-xl border border-brand-200 transition-colors"
+                title="Customer Profile & Rides"
+              >
+                <User className="w-3.5 h-3.5 text-brand-600" />
+                <span>My Profile</span>
+              </Link>
               {isClerkAdmin && !isAdmin && (
                 <Link
                   to="/admin/dashboard"
@@ -270,15 +278,24 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
                     </span>
                   </div>
                 </div>
-                {isClerkAdmin && (
+                <div className="flex items-center gap-1.5">
                   <Link
-                    to="/admin/dashboard"
+                    to="/customer/profile"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="text-[11px] font-extrabold text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded-lg border border-purple-200"
+                    className="text-[11px] font-extrabold text-brand-700 bg-brand-50 hover:bg-brand-100 px-2.5 py-1.5 rounded-lg border border-brand-200"
                   >
-                    Admin Console
+                    Profile
                   </Link>
-                )}
+                  {isClerkAdmin && (
+                    <Link
+                      to="/admin/dashboard"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="text-[11px] font-extrabold text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded-lg border border-purple-200"
+                    >
+                      Admin
+                    </Link>
+                  )}
+                </div>
               </Show>
               <Show when="signed-out">
                 <SignInButton mode="modal">

@@ -1607,8 +1607,90 @@ async function main() {
     console.log(`[PASS] 51. Dynamic Real-time Fares API: Successfully queried and updated platform fare settings.`);
     passed++;
 
+    // 52. Customer Google Profile Sync (/api/customers/sync)
+    const custSyncHandler = await loadHandler('api/customers/sync.ts');
+    const testCustEmail = `customer_${runId}@gmail.com`;
+    const custSyncReq = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: {
+        email: testCustEmail,
+        name: 'Google Customer Test',
+        phone: '9848011223',
+        avatarUrl: 'https://lh3.googleusercontent.com/test-avatar',
+        city: 'Hyderabad',
+        clerkId: `clerk_${runId}`
+      }
+    };
+    const custSyncRes = createMockRes();
+    await custSyncHandler(custSyncReq, custSyncRes);
+    if (custSyncRes.statusCode !== 200 || !custSyncRes.body?.success || custSyncRes.body?.customer?.email !== testCustEmail) {
+      throw new Error(`Customer sync failed: ${JSON.stringify(custSyncRes.body)}`);
+    }
+
+    console.log(`[PASS] 52. Customer Google Profile Sync: Successfully synced profile record for ${testCustEmail}.`);
+    passed++;
+
+    // 53. Customer Profile Fetch (/api/customers/profile)
+    const custProfileHandler = await loadHandler('api/customers/profile.ts');
+    const custProfRes = createMockRes();
+    await custProfileHandler({
+      method: 'GET',
+      headers: {},
+      url: `/api/customers/profile?email=${encodeURIComponent(testCustEmail)}`
+    }, custProfRes);
+    if (custProfRes.statusCode !== 200 || !custProfRes.body?.success || custProfRes.body?.customer?.email !== testCustEmail) {
+      throw new Error(`Customer profile fetch failed: ${JSON.stringify(custProfRes.body)}`);
+    }
+
+    console.log(`[PASS] 53. Customer Profile Retrieval: Retrieved profile & booking stats for ${testCustEmail}.`);
+    passed++;
+
+    // 54. Booking with Google Customer Email & Email Query Filter (/api/bookings?email=...)
+    const custBkgId = `LD-CUST-${Date.now()}`;
+    await db.execute({
+      sql: `INSERT INTO bookings (id, customer_name, customer_phone, customer_email, driver_id, driver_name, service_title, pickup_location, destination_location, estimated_fare, status) VALUES (?, 'Google Customer Test', '9848011223', ?, ?, 'OTP Test Driver', 'City Driver', 'Banjara Hills', 'Airport', 899, 'Completed');`,
+      args: [custBkgId, testCustEmail, otpDriverId]
+    });
+
+    const bkgEmailRes = createMockRes();
+    await bookingsHandler({
+      method: 'GET',
+      headers: {},
+      url: `/api/bookings?email=${encodeURIComponent(testCustEmail)}`
+    }, bkgEmailRes);
+    if (bkgEmailRes.statusCode !== 200 || !bkgEmailRes.body?.success || !Array.isArray(bkgEmailRes.body?.bookings) || bkgEmailRes.body.bookings.length === 0) {
+      throw new Error(`Booking query by customer email failed: ${JSON.stringify(bkgEmailRes.body)}`);
+    }
+    const foundBkg = bkgEmailRes.body.bookings.find(b => b.id === custBkgId);
+    if (!foundBkg || foundBkg.customerEmail !== testCustEmail) {
+      throw new Error(`Booking record missing customer email association: ${JSON.stringify(foundBkg)}`);
+    }
+
+    console.log(`[PASS] 54. Booking Google Email Association: Persisted customer email and verified query by email.`);
+    passed++;
+
+    // 55. Admin Customers Analytics API (/api/admin/customers)
+    const adminCustHandler = await loadHandler('api/admin/customers.ts');
+    const adminCustRes = createMockRes();
+    await adminCustHandler({
+      method: 'GET',
+      headers: { 'authorization': `Bearer ${adminToken}` }
+    }, adminCustRes);
+    if (adminCustRes.statusCode !== 200 || !adminCustRes.body?.success || !Array.isArray(adminCustRes.body?.customers)) {
+      throw new Error(`Admin customers query failed: ${JSON.stringify(adminCustRes.body)}`);
+    }
+    const syncedCust = adminCustRes.body.customers.find(c => c.email === testCustEmail);
+    if (!syncedCust || syncedCust.totalBookings < 1) {
+      throw new Error(`Admin customer record missing or incorrect booking count: ${JSON.stringify(syncedCust)}`);
+    }
+
+    console.log(`[PASS] 55. Admin Customers Analytics: Retrieved unified customer records with live booking frequency.`);
+    passed++;
+
     // Clean up test records
-    await db.execute({ sql: `DELETE FROM bookings WHERE driver_id = ?;`, args: [otpDriverId] });
+    await db.execute({ sql: `DELETE FROM bookings WHERE driver_id = ? OR customer_email = ?;`, args: [otpDriverId, testCustEmail] });
+    await db.execute({ sql: `DELETE FROM customers WHERE email = ?;`, args: [testCustEmail] });
     await db.execute({ sql: `DELETE FROM drivers WHERE id = ?;`, args: [otpDriverId] });
   } catch (err) {
     console.error(`[FAIL] New feature verification failed:`, err.message || err);

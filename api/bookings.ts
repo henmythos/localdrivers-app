@@ -47,6 +47,7 @@ export default async function handler(req: any, res: any) {
       const url = new URL(req.url, 'http://localhost');
       const idParam = url.searchParams.get('id') || req.query?.id;
       const phoneParam = url.searchParams.get('phone') || req.query?.phone;
+      const emailParam = url.searchParams.get('email') || req.query?.email;
       const driverIdParam = url.searchParams.get('driverId') || req.query?.driverId;
       const isAdmin = verifyAdminAuth(req);
 
@@ -65,10 +66,14 @@ export default async function handler(req: any, res: any) {
         const cleanDigits = String(phoneParam).replace(/\D/g, '').slice(-10);
         sql += ` AND (customer_phone LIKE ? OR replace(replace(replace(replace(replace(customer_phone, ' ', ''), '+', ''), '-', ''), '(', ''), ')', '') LIKE ?)`;
         args.push(`%${cleanDigits}`, `%${cleanDigits}`);
+      } else if (emailParam) {
+        const cleanEmail = String(emailParam).trim().toLowerCase();
+        sql += ` AND (LOWER(customer_email) = ? OR LOWER(data_json) LIKE ?)`;
+        args.push(cleanEmail, `%"customeremail":"${cleanEmail}"%`);
       } else if (!isAdmin) {
         return res.status(401).json({
           success: false,
-          error: 'Please specify an id, customer phone, or administrator credentials.',
+          error: 'Please specify an id, customer phone, email, or administrator credentials.',
         });
       }
 
@@ -118,6 +123,8 @@ export default async function handler(req: any, res: any) {
           paymentStatus: row.payment_status || extraData.paymentStatus || 'pending',
           vehicleType: row.vehicle_type || extraData.vehicleType || '',
           vehicleModel: row.vehicle_model || extraData.vehicleModel || '',
+          customerEmail: row.customer_email || extraData.customerEmail || '',
+          customerId: row.customer_id || extraData.customerId || '',
           tripStartTime: row.trip_start_time ? toIsoUtc(row.trip_start_time) : undefined,
           tripEndTime: row.trip_end_time ? toIsoUtc(row.trip_end_time) : undefined,
           tripDurationMinutes: row.trip_duration_minutes != null ? Number(row.trip_duration_minutes) : undefined,
@@ -634,6 +641,8 @@ export default async function handler(req: any, res: any) {
         status: _ignoreStatus,
         customerName,
         customerPhone,
+        customerEmail,
+        customerId,
         serviceTitle,
         pickupLocation,
         destinationLocation,
@@ -751,9 +760,13 @@ export default async function handler(req: any, res: any) {
       const endOtp = generateEndOtp();
       const vehicleType = String(body.vehicleType || otherDetails.vehicleType || 'Sedan');
       const vehicleModel = String(body.vehicleModel || otherDetails.vehicleModel || '');
+      const cleanCustomerEmail = customerEmail ? String(customerEmail).trim().toLowerCase() : '';
+      const cleanCustomerId = customerId ? String(customerId).trim() : '';
 
       const dataJson = JSON.stringify({
         ...(otherDetails || {}),
+        customerEmail: cleanCustomerEmail || undefined,
+        customerId: cleanCustomerId || undefined,
         pickupOtp,
         endOtp,
         vehicleType,
@@ -769,8 +782,9 @@ export default async function handler(req: any, res: any) {
               status, pickup_location, destination_location, date, time,
               notes, estimated_fare, idempotency_key, data_json,
               pickup_otp, end_otp, vehicle_type, vehicle_model,
+              customer_email, customer_id,
               created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
           `,
           args: [
             bookingId,
@@ -794,10 +808,38 @@ export default async function handler(req: any, res: any) {
             endOtp,
             vehicleType,
             vehicleModel,
+            cleanCustomerEmail || null,
+            cleanCustomerId || null,
             nowIso,
             nowIso,
           ],
         });
+
+        // Automatically maintain Customer profile record in database
+        if (cleanCustomerEmail) {
+          try {
+            const custId = cleanCustomerId || `cust-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+            await db.execute({
+              sql: `
+                INSERT INTO customers (id, email, name, phone, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(email) DO UPDATE SET
+                  name = COALESCE(customers.name, excluded.name),
+                  phone = COALESCE(excluded.phone, customers.phone),
+                  updated_at = CURRENT_TIMESTAMP;
+              `,
+              args: [custId, cleanCustomerEmail, customerName || 'Customer', customerPhone || null]
+            });
+            if (customerPhone) {
+              await db.execute({
+                sql: `UPDATE bookings SET customer_email = ? WHERE customer_phone = ? AND (customer_email IS NULL OR customer_email = '');`,
+                args: [cleanCustomerEmail, customerPhone]
+              });
+            }
+          } catch (custErr: any) {
+            // Non-blocking for customer sync
+          }
+        }
       } catch (insertErr: any) {
         // Roll back driver reservation so driver is not stranded in 'assigned'
         try {
@@ -822,6 +864,8 @@ export default async function handler(req: any, res: any) {
         id: bookingId,
         customerName: customerName || 'Customer',
         customerPhone,
+        customerEmail: cleanCustomerEmail,
+        customerId: cleanCustomerId,
         driverId: canonicalDriverId,
         driverName: String(driverRow.name),
         driverPhone: String(driverRow.phone),

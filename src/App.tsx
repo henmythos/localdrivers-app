@@ -14,6 +14,8 @@ import { DriverProfilePage } from './pages/DriverProfilePage';
 import { BookingsPage } from './pages/BookingsPage';
 import { BookingDetailPage } from './pages/BookingDetailPage';
 import { ServicesPage } from './pages/ServicesPage';
+import { CustomerProfilePage } from './pages/customer/CustomerProfilePage';
+import { CustomerLoginPage } from './pages/customer/CustomerLoginPage';
 
 // Driver Pages
 import { DriverLoginPage } from './pages/driver/DriverLoginPage';
@@ -40,23 +42,34 @@ import { CancellationPolicyPage } from './pages/legal/CancellationPolicyPage';
 import { DataDeletionPage } from './pages/legal/DataDeletionPage';
 import { useUser, useAuth } from '@clerk/react';
 import { authService } from './services/auth';
+import { customerService } from './services/customer';
 
 const ClerkAdminSync: React.FC = () => {
   const { user, isLoaded, isSignedIn } = useUser();
   const { getToken } = useAuth();
 
   useEffect(() => {
-    if (!isLoaded) return;
-    if (isSignedIn && user) {
-      const email = user.primaryEmailAddress?.emailAddress?.toLowerCase();
-      if (email === 'localdrivers.in@gmail.com') {
-        getToken().then(token => {
-          if (token) {
-            authService.loginAdminWithClerk(token).catch(() => {});
-          }
-        });
-      }
+    if (!isLoaded || !isSignedIn || !user) return;
+    const email = user.primaryEmailAddress?.emailAddress?.toLowerCase();
+    if (!email) return;
+
+    if (email === 'localdrivers.in@gmail.com') {
+      getToken().then(token => {
+        if (token) {
+          authService.loginAdminWithClerk(token).catch(() => {});
+        }
+      });
     }
+
+    // Automatically sync customer profile to backend on Google login
+    const storedPhone = localStorage.getItem('localdrivers_verified_customer_phone') || '';
+    customerService.syncCustomerProfileAsync({
+      email,
+      name: user.fullName || user.firstName || 'Customer',
+      phone: storedPhone || user.primaryPhoneNumber?.phoneNumber || '',
+      avatarUrl: user.imageUrl || '',
+      clerkId: user.id,
+    }).catch(() => {});
   }, [isLoaded, isSignedIn, user, getToken]);
 
   return null;
@@ -113,6 +126,10 @@ export const App: React.FC = () => {
             <Route path="/bookings" element={<BookingsPage />} />
             <Route path="/bookings/:id" element={<BookingDetailPage />} />
             <Route path="/services" element={<ServicesPage />} />
+            <Route path="/customer/profile" element={<CustomerProfilePage />} />
+            <Route path="/customer/login" element={<CustomerLoginPage />} />
+            <Route path="/profile" element={<CustomerProfilePage />} />
+            <Route path="/login" element={<CustomerLoginPage />} />
 
             {/* Legal & Play Store Pages */}
             <Route path="/privacy" element={<PrivacyPolicyPage />} />
