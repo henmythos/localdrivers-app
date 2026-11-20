@@ -124,7 +124,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // Add unlinked legacy riders from bookings who haven't signed up with Google yet
-    for (const [phoneDigits, unlinked] of unlinkedCustomers.entries()) {
+    for (const [phoneDigits, unlinked] of Array.from(unlinkedCustomers.entries())) {
       if (!registeredPhones.has(phoneDigits)) {
         const pStat = phoneStats.get(phoneDigits);
         customers.push({

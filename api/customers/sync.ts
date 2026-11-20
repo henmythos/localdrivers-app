@@ -89,7 +89,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const statsRes = await db.execute({ sql: statsSql, args: statsArgs });
-    const stats = statsRes.rows[0] || {};
+    const stats: any = statsRes.rows[0] || {};
 
     return res.status(200).json({
       success: true,
