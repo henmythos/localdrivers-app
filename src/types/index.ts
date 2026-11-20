@@ -107,6 +107,9 @@ export interface Driver {
   isHold?: boolean;
   pendingCommissionFee?: number;
   paymentLinkUrl?: string;
+  upiId?: string;
+  livingArea?: string;
+  outstationNoticeDays?: number;
   startingPrice: number;
   distanceKm: number;
   latitude: number;
@@ -158,6 +161,17 @@ export interface Booking {
   time: string;
   notes?: string;
   estimatedFare: number;
+  pickupOtp?: string;
+  endOtp?: string;
+  cancellationReason?: string;
+  cancelledBy?: 'customer' | 'driver' | 'admin' | 'system' | string;
+  cancellationDetails?: string;
+  cashCollected?: boolean;
+  cashCollectedAt?: string;
+  paymentMethod?: 'cash' | 'upi' | 'card' | string;
+  paymentStatus?: 'pending' | 'paid' | 'refunded' | string;
+  vehicleType?: string;
+  vehicleModel?: string;
   commissionFee?: number;
   commissionSettled?: boolean;
   status: BookingStatus;

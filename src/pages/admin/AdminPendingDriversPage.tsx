@@ -197,10 +197,18 @@ export const AdminPendingDriversPage: React.FC = () => {
                       <span>•</span>
                       <span className="flex items-center gap-1 font-semibold text-slate-800">
                         <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                        {driver.area}, {driver.city}
+                        Living: {driver.livingArea || driver.area}, {driver.city}
                       </span>
                       <span>•</span>
                       <span className="font-bold text-slate-700">{driver.experienceYears} Years Exp</span>
+                      {driver.outstationNoticeDays !== undefined && (
+                        <>
+                          <span>•</span>
+                          <span className="font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded text-[10px]">
+                            Outstation Notice: {driver.outstationNoticeDays === 0 ? 'Same Day' : `${driver.outstationNoticeDays}d`}
+                          </span>
+                        </>
+                      )}
                     </div>
 
                     <p className="text-xs text-slate-500 italic mt-2">

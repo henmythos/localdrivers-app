@@ -78,7 +78,46 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // 2. DEFAULT ACTION: APPROVE DRIVER
+    // 2. ACTION: SETTLE COMMISSION & LIFT HOLD (Blueprint 10% Platform Fee Clearance)
+    if (action === 'settle_commission' || action === 'clear_commission') {
+      await db.execute({
+        sql: `UPDATE drivers SET is_hold = 0, pending_commission_fee = 0, status = 'Approved', updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
+        args: [canonicalDriverId],
+      });
+      await db.execute({
+        sql: `UPDATE bookings SET commission_settled = 1, updated_at = CURRENT_TIMESTAMP WHERE driver_id = ? AND commission_fee > 0;`,
+        args: [canonicalDriverId],
+      });
+
+      return res.status(200).json({
+        success: true,
+        driverId: canonicalDriverId,
+        isHold: false,
+        pendingCommissionFee: 0,
+        message: `Commission payment verified and hold lifted for driver ${driverName}. Driver is now active and ready for new dispatches.`,
+        requestId: reqId,
+      });
+    }
+
+    // 3. ACTION: SET CUSTOM PAYMENT LINK OR UPI ID FOR COMMISSION COLLECTION
+    if (action === 'set_payment_details') {
+      const { paymentLinkUrl, upiId } = body;
+      await db.execute({
+        sql: `UPDATE drivers SET payment_link_url = ?, upi_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
+        args: [paymentLinkUrl ? String(paymentLinkUrl).trim() : null, upiId ? String(upiId).trim() : null, canonicalDriverId],
+      });
+
+      return res.status(200).json({
+        success: true,
+        driverId: canonicalDriverId,
+        paymentLinkUrl,
+        upiId,
+        message: `Payment collection link/UPI saved for driver ${driverName}.`,
+        requestId: reqId,
+      });
+    }
+
+    // 4. DEFAULT ACTION: APPROVE DRIVER
     const reviewedBy = process.env.ADMIN_USERNAME?.trim() || 'Admin';
     await db.execute({
       sql: `UPDATE drivers SET

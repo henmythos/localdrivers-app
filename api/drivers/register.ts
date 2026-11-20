@@ -212,6 +212,8 @@ export default async function handler(req: any, res: any) {
 
     const nowIso = new Date().toISOString();
     const today = nowIso.split('T')[0];
+    const livingArea = String(body.livingArea || area || 'Hyderabad').trim();
+    const outstationNoticeDays = Number(body.outstationNoticeDays) || 1;
 
     // 5. Database write
     if (isUpdate) {
@@ -229,6 +231,8 @@ export default async function handler(req: any, res: any) {
           vehicle_categories = ?,
           status = 'Pending',
           area = ?,
+          living_area = ?,
+          outstation_notice_days = ?,
           city = ?,
           description = ?,
           updated_at = CURRENT_TIMESTAMP
@@ -244,7 +248,9 @@ export default async function handler(req: any, res: any) {
           JSON.stringify(languages),
           JSON.stringify(services),
           JSON.stringify(vehicleCategories),
-          area.trim(),
+          livingArea,
+          livingArea,
+          outstationNoticeDays,
           city.trim(),
           description.trim(),
           driverId
@@ -264,13 +270,15 @@ export default async function handler(req: any, res: any) {
           id, driver_code, name, phone, email, password_hash, salt, photo,
           rating, total_trips, experience_years, languages, services,
           vehicle_categories, status, is_online, is_hold, pending_commission_fee,
-          starting_price, distance_km, latitude, longitude, area, city,
+          starting_price, distance_km, latitude, longitude, area, living_area,
+          outstation_notice_days, city,
           verification_badge, description, joined_date, created_at, updated_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?, ?, ?,
           5.0, 0, ?, ?, ?,
           ?, 'Pending', 0, 0, 0,
           299, 2.5, 17.4126, 78.4071, ?, ?,
+          ?, ?,
           0, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         );`,
         args: [
@@ -286,7 +294,9 @@ export default async function handler(req: any, res: any) {
           JSON.stringify(languages),
           JSON.stringify(services),
           JSON.stringify(vehicleCategories),
-          area.trim(),
+          livingArea,
+          livingArea,
+          outstationNoticeDays,
           city.trim(),
           description.trim(),
           today

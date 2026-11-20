@@ -126,14 +126,17 @@ export async function initDb(): Promise<Client> {
       "ALTER TABLE drivers ADD COLUMN current_work_status TEXT DEFAULT 'available';",
       "ALTER TABLE drivers ADD COLUMN active_booking_id TEXT;",
       "ALTER TABLE drivers ADD COLUMN last_online_at TEXT;",
-      "ALTER TABLE drivers ADD COLUMN last_location_at TEXT;"
+      "ALTER TABLE drivers ADD COLUMN last_location_at TEXT;",
+      "ALTER TABLE drivers ADD COLUMN living_area TEXT DEFAULT 'Hyderabad';",
+      "ALTER TABLE drivers ADD COLUMN outstation_notice_days INTEGER DEFAULT 1;",
+      "ALTER TABLE drivers ADD COLUMN payment_link_url TEXT;",
+      "ALTER TABLE drivers ADD COLUMN upi_id TEXT;"
     ];
 
     for (const alterSql of safeAddColumns) {
       try {
         await db.execute(alterSql);
       } catch (colErr: any) {
-        // Ignore duplicate column errors
         if (!colErr.message?.includes('duplicate column')) {
           // console.warn('[DB Migration]', colErr.message);
         }
@@ -191,6 +194,33 @@ export async function initDb(): Promise<Client> {
       );
     `);
 
+    // Safe column migrations on bookings table
+    const safeAddBookingColumns = [
+      "ALTER TABLE bookings ADD COLUMN pickup_otp TEXT;",
+      "ALTER TABLE bookings ADD COLUMN end_otp TEXT;",
+      "ALTER TABLE bookings ADD COLUMN cancellation_reason TEXT;",
+      "ALTER TABLE bookings ADD COLUMN cancelled_by TEXT;",
+      "ALTER TABLE bookings ADD COLUMN cancellation_details TEXT;",
+      "ALTER TABLE bookings ADD COLUMN commission_fee REAL DEFAULT 0;",
+      "ALTER TABLE bookings ADD COLUMN commission_settled INTEGER DEFAULT 0;",
+      "ALTER TABLE bookings ADD COLUMN cash_collected INTEGER DEFAULT 0;",
+      "ALTER TABLE bookings ADD COLUMN cash_collected_at TEXT;",
+      "ALTER TABLE bookings ADD COLUMN payment_method TEXT DEFAULT 'cash';",
+      "ALTER TABLE bookings ADD COLUMN payment_status TEXT DEFAULT 'pending';",
+      "ALTER TABLE bookings ADD COLUMN vehicle_type TEXT;",
+      "ALTER TABLE bookings ADD COLUMN vehicle_model TEXT;"
+    ];
+
+    for (const alterSql of safeAddBookingColumns) {
+      try {
+        await db.execute(alterSql);
+      } catch (colErr: any) {
+        if (!colErr.message?.includes('duplicate column')) {
+          // console.warn('[DB Migration]', colErr.message);
+        }
+      }
+    }
+
     // Indexes for high performance
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_drivers_phone ON drivers(phone);`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_drivers_status ON drivers(status);`);
@@ -209,6 +239,15 @@ export async function initDb(): Promise<Client> {
         name TEXT,
         role TEXT DEFAULT 'ADMIN',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 5. App Settings Table (Real-time Fare & Commission Controls)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
@@ -271,7 +310,11 @@ export async function initDb(): Promise<Client> {
         "ALTER TABLE drivers ADD COLUMN current_work_status TEXT DEFAULT 'available';",
         "ALTER TABLE drivers ADD COLUMN active_booking_id TEXT;",
         "ALTER TABLE drivers ADD COLUMN last_online_at TEXT;",
-        "ALTER TABLE drivers ADD COLUMN last_location_at TEXT;"
+        "ALTER TABLE drivers ADD COLUMN last_location_at TEXT;",
+        "ALTER TABLE drivers ADD COLUMN living_area TEXT DEFAULT 'Hyderabad';",
+        "ALTER TABLE drivers ADD COLUMN outstation_notice_days INTEGER DEFAULT 1;",
+        "ALTER TABLE drivers ADD COLUMN payment_link_url TEXT;",
+        "ALTER TABLE drivers ADD COLUMN upi_id TEXT;"
       ];
       for (const alterSql of safeAddColumnsLocal) {
         try { await dbClient.execute(alterSql); } catch {}
@@ -320,6 +363,33 @@ export async function initDb(): Promise<Client> {
           idempotency_key TEXT UNIQUE,
           data_json TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      const safeAddBookingColumnsLocal = [
+        "ALTER TABLE bookings ADD COLUMN pickup_otp TEXT;",
+        "ALTER TABLE bookings ADD COLUMN end_otp TEXT;",
+        "ALTER TABLE bookings ADD COLUMN cancellation_reason TEXT;",
+        "ALTER TABLE bookings ADD COLUMN cancelled_by TEXT;",
+        "ALTER TABLE bookings ADD COLUMN cancellation_details TEXT;",
+        "ALTER TABLE bookings ADD COLUMN commission_fee REAL DEFAULT 0;",
+        "ALTER TABLE bookings ADD COLUMN commission_settled INTEGER DEFAULT 0;",
+        "ALTER TABLE bookings ADD COLUMN cash_collected INTEGER DEFAULT 0;",
+        "ALTER TABLE bookings ADD COLUMN cash_collected_at TEXT;",
+        "ALTER TABLE bookings ADD COLUMN payment_method TEXT DEFAULT 'cash';",
+        "ALTER TABLE bookings ADD COLUMN payment_status TEXT DEFAULT 'pending';",
+        "ALTER TABLE bookings ADD COLUMN vehicle_type TEXT;",
+        "ALTER TABLE bookings ADD COLUMN vehicle_model TEXT;"
+      ];
+      for (const alterSql of safeAddBookingColumnsLocal) {
+        try { await dbClient.execute(alterSql); } catch {}
+      }
+
+      await dbClient.execute(`
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
           updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
       `);

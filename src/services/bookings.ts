@@ -174,11 +174,11 @@ export const bookingsService = {
     return { success: false, error: res.error || res.data?.error };
   },
 
-  // Driver Pass / Reject Booking to next online driver (Persists to Server)
-  async passToNextDriverAsync(id: string): Promise<{ success: boolean; reassigned?: boolean; status?: string; error?: string }> {
+  // Driver Pass / Reject Booking to next online driver (Persists to Server with structured reason)
+  async passToNextDriverAsync(id: string, reason?: string): Promise<{ success: boolean; reassigned?: boolean; status?: string; error?: string }> {
     const res = await apiClient.post<{ success: boolean; reassigned?: boolean; status?: string; error?: string }>(
       '/api/bookings',
-      { action: 'pass', bookingId: id },
+      { action: 'pass', bookingId: id, reason: reason || 'Driver passed booking request' },
       { fallbackErrorMessage: 'Failed to pass booking on server.' }
     );
     if (res.success && res.data?.status === 'Cancelled') {
@@ -262,15 +262,22 @@ export const bookingsService = {
     return dbService.updateBookingStatus(id, status);
   },
 
-  // Start Trip (Authoritative Server Timestamp & Location Capture)
-  async startTripAsync(id: string, location?: GeoLocation, odometerStartKm?: number): Promise<{ success: boolean; booking?: Booking; error?: string }> {
-    const res = await apiClient.post<{ success: boolean; bookingId: string; tripStartTime: string; status: string; error?: string }>(
+  // Start Trip (Authoritative Server Timestamp, Location Capture & 6-digit Virtual OTP Verification)
+  async startTripAsync(
+    id: string,
+    location?: GeoLocation,
+    odometerStartKm?: number,
+    otp?: string
+  ): Promise<{ success: boolean; booking?: Booking; error?: string }> {
+    const res = await apiClient.post<{ success: boolean; bookingId: string; tripStartTime: string; status: string; endOtp?: string; error?: string }>(
       '/api/bookings',
       {
         action: 'start',
         bookingId: id,
         location,
         odometerKm: odometerStartKm,
+        otp,
+        pickupOtp: otp,
       },
       {
         fallbackErrorMessage: 'Failed to start trip on server. Please check your connection.',
@@ -279,26 +286,38 @@ export const bookingsService = {
 
     const localBooking = dbService.startTrip(id, location, odometerStartKm);
     if (res.success && res.data?.success) {
+      if (res.data.endOtp) {
+        dbService.updateBooking(id, { endOtp: res.data.endOtp });
+      }
       return { success: true, booking: localBooking };
     }
 
     return { success: false, booking: localBooking, error: res.error || res.data?.error };
   },
 
-  startTrip(id: string, location?: GeoLocation, odometerStartKm?: number): Booking | undefined {
+  startTrip(id: string, location?: GeoLocation, odometerStartKm?: number, otp?: string): Booking | undefined {
     // Send to server asynchronously
-    this.startTripAsync(id, location, odometerStartKm).catch(console.error);
+    this.startTripAsync(id, location, odometerStartKm, otp).catch(console.error);
     return dbService.startTrip(id, location, odometerStartKm);
   },
 
-  // Complete Trip (Idempotent duration calculation, distance verification, itemized charges)
+  // Complete Trip (Authoritative duration calculation, 6-digit End PIN verification & 10% commission hold)
   async completeTripAsync(
     id: string,
     location?: GeoLocation,
     completedBy: 'customer' | 'driver' = 'customer',
-    odometerEndKm?: number
-  ): Promise<{ success: boolean; booking?: Booking; error?: string }> {
-    const res = await apiClient.post<{ success: boolean; bookingId: string; tripDurationMinutes: number; finalFare: number; error?: string }>(
+    odometerEndKm?: number,
+    endOtp?: string
+  ): Promise<{ success: boolean; booking?: Booking; finalFare?: number; commissionFee?: number; error?: string }> {
+    const res = await apiClient.post<{
+      success: boolean;
+      bookingId: string;
+      tripDurationMinutes: number;
+      finalFare: number;
+      commissionFee?: number;
+      isHold?: boolean;
+      error?: string;
+    }>(
       '/api/bookings',
       {
         action: 'complete',
@@ -306,6 +325,8 @@ export const bookingsService = {
         location,
         odometerKm: odometerEndKm,
         completedBy,
+        endOtp,
+        endPin: endOtp,
       },
       {
         fallbackErrorMessage: 'Failed to complete trip on server. Please check your connection.',
@@ -314,32 +335,80 @@ export const bookingsService = {
 
     const localBooking = dbService.completeTrip(id, location, completedBy, odometerEndKm);
     if (res.success && res.data?.success) {
-      return { success: true, booking: localBooking };
+      if (res.data.finalFare != null) {
+        dbService.updateBooking(id, {
+          finalFare: res.data.finalFare,
+          commissionFee: res.data.commissionFee || Math.round(res.data.finalFare * 0.10),
+        });
+      }
+      return {
+        success: true,
+        booking: localBooking,
+        finalFare: res.data.finalFare,
+        commissionFee: res.data.commissionFee,
+      };
     }
 
     return { success: false, booking: localBooking, error: res.error || res.data?.error };
+  },
+
+  // Confirm Cash Received (Unified shared state: customer & driver see same bill -> driver confirms cash received)
+  async confirmCashAsync(id: string): Promise<{ success: boolean; error?: string }> {
+    const res = await apiClient.post<{ success: boolean; error?: string }>(
+      '/api/bookings',
+      { action: 'confirm_cash', bookingId: id },
+      { fallbackErrorMessage: 'Failed to confirm cash receipt on server.' }
+    );
+
+    if (res.success && res.data?.success) {
+      dbService.updateBooking(id, {
+        cashCollected: true,
+        cashCollectedAt: new Date().toISOString(),
+        paymentStatus: 'paid',
+      });
+      return { success: true };
+    }
+
+    return { success: false, error: res.error || res.data?.error };
   },
 
   completeTrip(
     id: string,
     location?: GeoLocation,
     completedBy: 'customer' | 'driver' = 'customer',
-    odometerEndKm?: number
+    odometerEndKm?: number,
+    endOtp?: string
   ): Booking | undefined {
     // Send to server asynchronously
-    this.completeTripAsync(id, location, completedBy, odometerEndKm).catch(console.error);
+    this.completeTripAsync(id, location, completedBy, odometerEndKm, endOtp).catch(console.error);
     return dbService.completeTrip(id, location, completedBy, odometerEndKm);
   },
 
-  // Cancel Booking (Server-Authoritative Status & Driver Assignment Release)
-  async cancelBookingAsync(id: string, reason?: string): Promise<{ success: boolean; error?: string }> {
+  // Cancel Booking (Server-Authoritative Status & Driver Assignment Release with Structured Reason)
+  async cancelBookingAsync(
+    id: string,
+    reason?: string,
+    cancelledBy: 'customer' | 'driver' | 'admin' = 'customer',
+    details?: string
+  ): Promise<{ success: boolean; error?: string }> {
     const res = await apiClient.post<{ success: boolean; error?: string }>(
       '/api/bookings',
-      { action: 'cancel', bookingId: id, reason },
+      {
+        action: 'cancel',
+        bookingId: id,
+        reason: reason || 'Cancelled by user',
+        cancelledBy,
+        details,
+      },
       { fallbackErrorMessage: 'Failed to cancel booking on server.' }
     );
     if (res.success && res.data?.success) {
-      dbService.updateBookingStatus(id, 'Cancelled');
+      dbService.updateBooking(id, {
+        status: 'Cancelled',
+        cancellationReason: reason,
+        cancelledBy,
+        cancellationDetails: details,
+      });
       return { success: true };
     }
     return { success: false, error: res.error || res.data?.error };

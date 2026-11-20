@@ -103,18 +103,32 @@ export const DriverDashboardPage: React.FC = () => {
 
   // Trip Start & End Modals State
   const [startTripBooking, setStartTripBooking] = useState<Booking | null>(null);
+  const [pickupOtpInput, setPickupOtpInput] = useState('');
   const [odometerStartInput, setOdometerStartInput] = useState('');
   const [isStartingTrip, setIsStartingTrip] = useState(false);
 
   const [endTripBooking, setEndTripBooking] = useState<Booking | null>(null);
+  const [endPinInput, setEndPinInput] = useState('');
   const [odometerEndInput, setOdometerEndInput] = useState('');
   const [isEndingTrip, setIsEndingTrip] = useState(false);
 
+  const [tripActionError, setTripActionError] = useState<string | null>(null);
+
+  // Shared State Unified Final Bill Modal (PDF Rule 1)
+  const [completedBillBooking, setCompletedBillBooking] = useState<Booking | null>(null);
+  const [isConfirmingCash, setIsConfirmingCash] = useState(false);
+
+  // Decline Booking Modal State (PDF Rule 2)
+  const [declineBooking, setDeclineBooking] = useState<Booking | null>(null);
+  const [declineReason, setDeclineReason] = useState('Customer unreachable / phone off');
+
   useBodyScrollLock(
-    !!startTripBooking || !!endTripBooking,
+    !!startTripBooking || !!endTripBooking || !!completedBillBooking || !!declineBooking,
     () => {
       if (endTripBooking) setEndTripBooking(null);
       else if (startTripBooking) setStartTripBooking(null);
+      else if (completedBillBooking) setCompletedBillBooking(null);
+      else if (declineBooking) setDeclineBooking(null);
     }
   );
 
@@ -313,9 +327,14 @@ export const DriverDashboardPage: React.FC = () => {
   };
 
   const handleRejectRequest = async (bookingId: string) => {
+    const bkg = driverBookings.find(b => b.id === bookingId);
+    if (bkg) {
+      setDeclineBooking(bkg);
+      return;
+    }
     setIsProcessingActionId(bookingId);
     try {
-      await bookingsService.passToNextDriverAsync(bookingId);
+      await bookingsService.passToNextDriverAsync(bookingId, 'Driver declined booking request');
       await loadData();
     } catch (err: any) {
       console.error('Error passing booking:', err);
@@ -324,34 +343,124 @@ export const DriverDashboardPage: React.FC = () => {
     }
   };
 
-  // Start Trip Action (Captures Start GPS & Starts Authoritative Timer)
-  const handleConfirmStartTrip = async () => {
-    if (!startTripBooking) return;
-    setIsStartingTrip(true);
-
-    const startLocation = await gpsService.captureEventLocation('Trip Start');
-    const odoVal = odometerStartInput.trim() ? Number(odometerStartInput.trim()) : undefined;
-
-    await bookingsService.startTripAsync(startTripBooking.id, startLocation, odoVal);
-    setIsStartingTrip(false);
-    setStartTripBooking(null);
-    setOdometerStartInput('');
-    loadData();
+  const handleConfirmDecline = async () => {
+    if (!declineBooking) return;
+    setIsProcessingActionId(declineBooking.id);
+    try {
+      await bookingsService.passToNextDriverAsync(declineBooking.id, declineReason);
+      setDeclineBooking(null);
+      await loadData();
+    } catch (err: any) {
+      console.error('Error declining booking:', err);
+    } finally {
+      setIsProcessingActionId(null);
+    }
   };
 
-  // End Trip Action (Captures End GPS & Finalizes Authoritative Billing)
+  // Start Trip Action (Captures Start GPS, validates 6-digit virtual pickup OTP & activates live timer)
+  const handleConfirmStartTrip = async () => {
+    if (!startTripBooking) return;
+    if (!pickupOtpInput.trim()) {
+      setTripActionError('Please enter the customer\'s 6-digit Virtual Pickup OTP (e.g. 1AB2C3).');
+      return;
+    }
+    setIsStartingTrip(true);
+    setTripActionError(null);
+
+    try {
+      const startLocation = await gpsService.captureEventLocation('Trip Start');
+      const odoVal = odometerStartInput.trim() ? Number(odometerStartInput.trim()) : undefined;
+
+      const res = await bookingsService.startTripAsync(
+        startTripBooking.id,
+        startLocation,
+        odoVal,
+        pickupOtpInput.trim().toUpperCase()
+      );
+
+      if (res.success) {
+        setIsStartingTrip(false);
+        setStartTripBooking(null);
+        setPickupOtpInput('');
+        setOdometerStartInput('');
+        setTripActionError(null);
+        loadData();
+      } else {
+        setTripActionError(res.error || 'Invalid Pickup OTP. Please check with customer.');
+        setIsStartingTrip(false);
+      }
+    } catch (err: any) {
+      setTripActionError(err.message || 'Error starting trip.');
+      setIsStartingTrip(false);
+    }
+  };
+
+  // End Trip Action (Captures End GPS, validates 6-digit End PIN & finalizes bill)
   const handleConfirmEndTrip = async () => {
     if (!endTripBooking) return;
+    if (!endPinInput.trim()) {
+      setTripActionError('Please enter the customer\'s 6-digit End PIN to finish the trip.');
+      return;
+    }
     setIsEndingTrip(true);
+    setTripActionError(null);
 
-    const endLocation = await gpsService.captureEventLocation('Trip End');
-    const odoVal = odometerEndInput.trim() ? Number(odometerEndInput.trim()) : undefined;
+    try {
+      const endLocation = await gpsService.captureEventLocation('Trip End');
+      const odoVal = odometerEndInput.trim() ? Number(odometerEndInput.trim()) : undefined;
 
-    await bookingsService.completeTripAsync(endTripBooking.id, endLocation, 'driver', odoVal);
-    setIsEndingTrip(false);
-    setEndTripBooking(null);
-    setOdometerEndInput('');
-    loadData();
+      const res = await bookingsService.completeTripAsync(
+        endTripBooking.id,
+        endLocation,
+        'driver',
+        odoVal,
+        endPinInput.trim()
+      );
+
+      if (res.success && res.finalFare != null) {
+        const finished = {
+          ...endTripBooking,
+          finalFare: res.finalFare,
+          commissionFee: res.commissionFee || Math.round(res.finalFare * 0.10),
+          status: 'Completed' as const,
+        };
+        setIsEndingTrip(false);
+        setEndTripBooking(null);
+        setEndPinInput('');
+        setOdometerEndInput('');
+        setTripActionError(null);
+        setCompletedBillBooking(finished);
+        loadData();
+      } else {
+        setTripActionError(res.error || 'Invalid End PIN. Please check with customer.');
+        setIsEndingTrip(false);
+      }
+    } catch (err: any) {
+      setTripActionError(err.message || 'Error completing trip.');
+      setIsEndingTrip(false);
+    }
+  };
+
+  // Confirm cash collected from customer (Unified Shared State)
+  const handleConfirmCashCollected = async (bookingId: string) => {
+    setIsConfirmingCash(true);
+    try {
+      await bookingsService.confirmCashAsync(bookingId);
+      if (completedBillBooking) {
+        setCompletedBillBooking({
+          ...completedBillBooking,
+          cashCollected: true,
+          paymentStatus: 'paid',
+        });
+      }
+      setPaymentSuccessMsg('Cash payment confirmed! Profile is now on 10% platform commission hold until payment is recorded by admin.');
+      setTimeout(() => setPaymentSuccessMsg(null), 6000);
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error recording cash payment.');
+    } finally {
+      setIsConfirmingCash(false);
+    }
   };
 
   const handlePayCommission = () => {
@@ -896,7 +1005,10 @@ export const DriverDashboardPage: React.FC = () => {
       {startTripBooking && createPortal(
         <div
           onClick={(e) => {
-            if (e.target === e.currentTarget) setStartTripBooking(null);
+            if (e.target === e.currentTarget) {
+              setStartTripBooking(null);
+              setTripActionError(null);
+            }
           }}
           className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto modal-overlay-container overscroll-contain animate-in fade-in"
         >
@@ -911,13 +1023,43 @@ export const DriverDashboardPage: React.FC = () => {
             <div className="text-center">
               <h3 className="text-lg font-black text-slate-900">Start Driver Service</h3>
               <p className="text-xs text-slate-500 mt-1">
-                Have you arrived and boarded the customer's vehicle?
+                Board customer vehicle and enter their 6-digit Virtual Pickup OTP.
               </p>
             </div>
+
+            {tripActionError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-xl flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+                <span>{tripActionError}</span>
+              </div>
+            )}
 
             <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1 text-slate-700">
               <div><strong>Customer:</strong> {startTripBooking.customerName}</div>
               <div><strong>Pickup:</strong> {startTripBooking.pickupLocation}</div>
+              {startTripBooking.vehicleType && (
+                <div><strong>Vehicle:</strong> {startTripBooking.vehicleType} {startTripBooking.vehicleModel || ''}</div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-black text-slate-800 mb-1">
+                Virtual Pickup OTP (From Customer App) *
+              </label>
+              <input
+                type="text"
+                maxLength={6}
+                value={pickupOtpInput}
+                onChange={e => {
+                  setPickupOtpInput(e.target.value.toUpperCase());
+                  setTripActionError(null);
+                }}
+                placeholder="e.g. 1AB2C3"
+                className="w-full px-4 py-3 rounded-xl border-2 border-brand-500 text-base font-black font-mono tracking-widest text-center text-slate-900 focus:ring-2 focus:ring-brand-400"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">
+                Ask the customer for the 6-character code shown on their booking screen.
+              </span>
             </div>
 
             <div>
@@ -939,7 +1081,10 @@ export const DriverDashboardPage: React.FC = () => {
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setStartTripBooking(null)}
+                onClick={() => {
+                  setStartTripBooking(null);
+                  setTripActionError(null);
+                }}
                 className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50"
               >
                 Cancel
@@ -950,7 +1095,7 @@ export const DriverDashboardPage: React.FC = () => {
                 onClick={handleConfirmStartTrip}
                 className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-extrabold shadow-md disabled:opacity-50"
               >
-                {isStartingTrip ? 'Capturing GPS...' : 'Confirm & Start Trip'}
+                {isStartingTrip ? 'Verifying OTP & GPS...' : 'Verify OTP & Start Trip'}
               </button>
             </div>
           </div>
@@ -958,11 +1103,14 @@ export const DriverDashboardPage: React.FC = () => {
         document.body
       )}
 
-      {/* END TRIP MODAL */}
+      {/* END TRIP MODAL (Validates 6-Digit End PIN) */}
       {endTripBooking && createPortal(
         <div
           onClick={(e) => {
-            if (e.target === e.currentTarget) setEndTripBooking(null);
+            if (e.target === e.currentTarget) {
+              setEndTripBooking(null);
+              setTripActionError(null);
+            }
           }}
           className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto modal-overlay-container overscroll-contain animate-in fade-in"
         >
@@ -975,10 +1123,37 @@ export const DriverDashboardPage: React.FC = () => {
             </div>
 
             <div className="text-center">
-              <h3 className="text-lg font-black text-slate-900">Complete Trip & Finalize</h3>
+              <h3 className="text-lg font-black text-slate-900">Complete Trip & Finalize Bill</h3>
               <p className="text-xs text-slate-500 mt-1">
-                Service ended with customer. Record final GPS and duration.
+                Enter the customer's 6-digit End PIN to complete service and calculate fare.
               </p>
+            </div>
+
+            {tripActionError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-xl flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+                <span>{tripActionError}</span>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-black text-slate-800 mb-1">
+                Customer 6-Digit End Trip PIN *
+              </label>
+              <input
+                type="text"
+                maxLength={6}
+                value={endPinInput}
+                onChange={e => {
+                  setEndPinInput(e.target.value.replace(/\D/g, ''));
+                  setTripActionError(null);
+                }}
+                placeholder="e.g. 582914"
+                className="w-full px-4 py-3 rounded-xl border-2 border-emerald-500 text-base font-black font-mono tracking-widest text-center text-slate-900 focus:ring-2 focus:ring-emerald-400"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">
+                Ask the customer for the 6-digit completion PIN generated when the trip started.
+              </span>
             </div>
 
             <div>
@@ -997,7 +1172,10 @@ export const DriverDashboardPage: React.FC = () => {
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setEndTripBooking(null)}
+                onClick={() => {
+                  setEndTripBooking(null);
+                  setTripActionError(null);
+                }}
                 className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50"
               >
                 Continue Ride
@@ -1008,7 +1186,189 @@ export const DriverDashboardPage: React.FC = () => {
                 onClick={handleConfirmEndTrip}
                 className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-md disabled:opacity-50"
               >
-                {isEndingTrip ? 'Recording GPS...' : 'Complete & Collect Fare'}
+                {isEndingTrip ? 'Calculating Final Fare...' : 'Verify PIN & Finalize Bill'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* UNIFIED FINAL BILL & CASH COLLECTION MODAL (PDF Rule 1: Shared State) */}
+      {completedBillBooking && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget && completedBillBooking.cashCollected) {
+              setCompletedBillBooking(null);
+            }
+          }}
+          className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto modal-overlay-container overscroll-contain animate-in fade-in"
+        >
+          <div
+            className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-5 relative my-auto overscroll-contain max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-8 h-8 stroke-[2.5]" />
+            </div>
+
+            <div className="text-center">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 mb-2">
+                Trip Authoritatively Completed
+              </div>
+              <h3 className="text-xl font-black text-slate-900">Unified Ride Summary & Bill</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Both customer and driver screens show the identical authoritative fare below.
+              </p>
+            </div>
+
+            {/* Bill Details */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2.5 text-xs text-slate-700">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                <span className="font-semibold text-slate-500">Booking Reference:</span>
+                <span className="font-mono font-extrabold text-slate-900">{completedBillBooking.id}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-slate-500">Customer:</span>
+                <span className="font-bold text-slate-900">{completedBillBooking.customerName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-slate-500">Service Category:</span>
+                <span className="font-bold text-slate-900">{completedBillBooking.serviceTitle}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-slate-500">Payment Method:</span>
+                <span className="font-extrabold text-brand-700 uppercase">Cash to Driver</span>
+              </div>
+              <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
+                <div>
+                  <span className="font-black text-sm text-slate-900 block">Total Final Fare:</span>
+                  <span className="text-[10px] text-slate-500">Cash collection amount</span>
+                </div>
+                <span className="text-2xl font-black text-emerald-600">
+                  ₹{completedBillBooking.finalFare}
+                </span>
+              </div>
+            </div>
+
+            {/* 10% Platform Commission Notice */}
+            <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-300 text-xs text-amber-900 space-y-1">
+              <div className="flex items-center gap-1.5 font-black text-amber-950">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>10% Platform Commission Fee: ₹{completedBillBooking.commissionFee || Math.round((completedBillBooking.finalFare || 0) * 0.10)}</span>
+              </div>
+              <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                Upon cash confirmation, your profile is placed on commission hold until the ₹{completedBillBooking.commissionFee || Math.round((completedBillBooking.finalFare || 0) * 0.10)} platform fee is paid via UPI / verified by admin.
+              </p>
+            </div>
+
+            {/* Cash Confirmation Action */}
+            <div className="space-y-2 pt-2">
+              {completedBillBooking.cashCollected ? (
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-300 text-center text-xs font-black text-emerald-800 flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Cash Payment Received & Confirmed!</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isConfirmingCash}
+                  onClick={() => handleConfirmCashCollected(completedBillBooking.id)}
+                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  {isConfirmingCash ? 'Recording Cash...' : `Confirm Cash Received (₹${completedBillBooking.finalFare})`}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setCompletedBillBooking(null)}
+                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors"
+              >
+                Close Summary
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* STRUCTURED DECLINE MODAL (PDF Rule 2) */}
+      {declineBooking && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDeclineBooking(null);
+          }}
+          className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto modal-overlay-container overscroll-contain animate-in fade-in"
+        >
+          <div
+            className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 relative my-auto overscroll-contain max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6 stroke-[2.2]" />
+            </div>
+
+            <div className="text-center">
+              <h3 className="text-lg font-black text-slate-900">Decline Booking Request</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Please select the reason for declining this ride. This reason is logged to Admin operations.
+              </p>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1 text-slate-700">
+              <div><strong>Booking ID:</strong> {declineBooking.id}</div>
+              <div><strong>Pickup:</strong> {declineBooking.pickupLocation}</div>
+              <div><strong>Fare:</strong> ₹{declineBooking.estimatedFare}</div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-black text-slate-800">
+                Reason for Decline *
+              </label>
+              {[
+                'Customer unreachable / phone off',
+                'Pickup location too far / out of range',
+                'Customer wants vehicle type driver cannot handle',
+                'Heavy traffic / vehicle breakdown',
+                'Personal emergency / ending duty shift',
+              ].map((reasonOption) => (
+                <label
+                  key={reasonOption}
+                  onClick={() => setDeclineReason(reasonOption)}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                    declineReason === reasonOption
+                      ? 'border-brand-600 bg-brand-50 text-brand-900 font-black ring-1 ring-brand-500'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="declineReason"
+                    checked={declineReason === reasonOption}
+                    onChange={() => setDeclineReason(reasonOption)}
+                    className="text-brand-600 focus:ring-brand-500"
+                  />
+                  <span>{reasonOption}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeclineBooking(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Keep Booking
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDecline}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold shadow-md"
+              >
+                Confirm Decline
               </button>
             </div>
           </div>

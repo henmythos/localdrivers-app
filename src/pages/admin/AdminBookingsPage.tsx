@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Booking, BookingStatus, ServiceType, TripAuditRecord } from '../../types';
 import { bookingsService } from '../../services/bookings';
+import { driversService } from '../../services/drivers';
 import { dbService } from '../../services/database';
 import { authService } from '../../services/auth';
 import { RouteMap } from '../../components/map/RouteMap';
@@ -662,6 +663,14 @@ export const AdminBookingsPage: React.FC = () => {
                         {b.disputeFlag && <AlertTriangle className="w-3 h-3 text-red-600" />}
                         {b.status}
                       </span>
+
+                      {/* Display structured cancellation reason (PDF Rule 2) */}
+                      {b.status === 'Cancelled' && b.cancellationReason && (
+                        <div className="mt-1 text-[10px] text-red-700 bg-red-50 p-1.5 rounded border border-red-200">
+                          <strong>Reason:</strong> {b.cancellationReason}
+                          {b.cancelledBy && <span className="block text-slate-500">By: {b.cancelledBy}</span>}
+                        </div>
+                      )}
                     </td>
 
                     {/* Fare */}
@@ -677,11 +686,39 @@ export const AdminBookingsPage: React.FC = () => {
                           Est: ₹{b.estimatedFare}
                         </span>
                       )}
+
+                      {/* 10% Platform Commission accounting (PDF Rule: 10% Platform Fee) */}
+                      {b.commissionFee !== undefined && b.commissionFee > 0 && (
+                        <div className="mt-1 text-[10px] text-amber-800 font-bold">
+                          10% Fee: ₹{b.commissionFee}
+                        </div>
+                      )}
+                      {b.cashCollected && (
+                        <span className="inline-block mt-0.5 text-[9px] font-bold px-1.5 py-0.2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded">
+                          Cash Collected
+                        </span>
+                      )}
                     </td>
 
                     {/* Actions */}
                     <td className="p-4 align-top text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        
+                        {/* Settle Commission action for completed bookings */}
+                        {b.status === 'Completed' && b.commissionFee && !b.commissionSettled && (
+                          <button
+                            onClick={async () => {
+                              if (confirm(`Clear ₹${b.commissionFee} commission hold for driver ${b.driverName}?`)) {
+                                await driversService.settleCommissionAsync(b.driverId);
+                                load();
+                              }
+                            }}
+                            className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-extrabold transition-colors"
+                            title="Settle 10% commission fee & lift driver hold"
+                          >
+                            Clear Fee
+                          </button>
+                        )}
                         
                         {/* Inspect & Audit Modal trigger */}
                         <button

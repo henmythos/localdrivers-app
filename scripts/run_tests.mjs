@@ -1382,6 +1382,239 @@ async function main() {
     failed++;
   }
 
+  // 47. Virtual Pickup OTP Verification on Trip Start (PDF Rule: 6-char alphanumeric 1AB2C3)
+  try {
+    const dbMod = await loadModule('api/_lib/db.ts');
+    const db = await dbMod.initDb();
+    const bookingsHandler = await loadHandler('api/bookings.ts');
+
+    const otpDriverId = `drv-otp-${Date.now()}`;
+    const otpPhone = `94${Date.now().toString().slice(-8)}`;
+    const otpDriverCode = `P${Date.now().toString().slice(-5)}`;
+    await db.execute({
+      sql: `INSERT INTO drivers (id, driver_code, name, phone, status, is_online, is_hold, current_work_status) VALUES (?, ?, 'OTP Test Driver', ?, 'Approved', 1, 0, 'available');`,
+      args: [otpDriverId, otpDriverCode, otpPhone]
+    });
+
+    const createReq = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: {
+        driverId: otpDriverId,
+        customerName: 'OTP Customer',
+        customerPhone: '9848011223',
+        serviceTitle: 'City Driver',
+        pickupLocation: 'Attapur, Hyderabad',
+        destinationLocation: 'Kachiguda, Hyderabad',
+        vehicleType: 'Sedan',
+        vehicleModel: 'Honda City',
+        date: '2026-10-20',
+        time: 'Instant ASAP',
+        estimatedFare: 500,
+      }
+    };
+    const createRes = createMockRes();
+    await bookingsHandler(createReq, createRes);
+    const bkg = createRes.body?.booking;
+    if (!bkg?.id || !bkg?.pickupOtp || !bkg?.endOtp) {
+      throw new Error(`Booking creation did not generate pickup_otp and end_otp: ${JSON.stringify(createRes.body)}`);
+    }
+
+    // Attempt start with invalid OTP
+    const badStartReq = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: {
+        action: 'start',
+        bookingId: bkg.id,
+        driverId: otpDriverId,
+        pickupOtp: 'WRONG1'
+      }
+    };
+    const badStartRes = createMockRes();
+    await bookingsHandler(badStartReq, badStartRes);
+    if (badStartRes.statusCode !== 400 || !badStartRes.body?.error?.includes('Invalid Pickup OTP')) {
+      throw new Error(`Expected HTTP 400 for bad OTP, got ${badStartRes.statusCode}: ${JSON.stringify(badStartRes.body)}`);
+    }
+
+    // Start with valid OTP
+    const goodStartReq = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: {
+        action: 'start',
+        bookingId: bkg.id,
+        driverId: otpDriverId,
+        pickupOtp: bkg.pickupOtp
+      }
+    };
+    const goodStartRes = createMockRes();
+    await bookingsHandler(goodStartReq, goodStartRes);
+    if (goodStartRes.statusCode !== 200 || goodStartRes.body?.status !== 'In Progress') {
+      throw new Error(`Valid OTP start failed: ${JSON.stringify(goodStartRes.body)}`);
+    }
+
+    console.log(`[PASS] 47. Virtual Pickup OTP: Validated 6-character code (${bkg.pickupOtp}) before starting trip timer.`);
+    passed++;
+
+    // 48. End PIN Verification & 10% Platform Commission Hold on Trip Complete (PDF Rule 1)
+    // Attempt complete with invalid PIN
+    const badEndReq = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: {
+        action: 'complete',
+        bookingId: bkg.id,
+        completedBy: 'driver',
+        endOtp: '000000'
+      }
+    };
+    const badEndRes = createMockRes();
+    await bookingsHandler(badEndReq, badEndRes);
+    if (badEndRes.statusCode !== 400 || !badEndRes.body?.error?.includes('Invalid End PIN')) {
+      throw new Error(`Expected HTTP 400 for bad End PIN, got ${badEndRes.statusCode}: ${JSON.stringify(badEndRes.body)}`);
+    }
+
+    // Complete with valid PIN
+    const goodEndReq = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: {
+        action: 'complete',
+        bookingId: bkg.id,
+        completedBy: 'driver',
+        endOtp: bkg.endOtp
+      }
+    };
+    const goodEndRes = createMockRes();
+    await bookingsHandler(goodEndReq, goodEndRes);
+    if (goodEndRes.statusCode !== 200 || goodEndRes.body?.status !== 'Completed') {
+      throw new Error(`Valid End PIN completion failed: ${JSON.stringify(goodEndRes.body)}`);
+    }
+
+    // Verify 10% platform commission fee calculated (500 fare -> 50 fee)
+    const expectedCommission = Math.round((goodEndRes.body?.finalFare || 500) * 0.10);
+    if (goodEndRes.body?.commissionFee !== expectedCommission) {
+      throw new Error(`Expected commission ${expectedCommission}, got ${goodEndRes.body?.commissionFee}`);
+    }
+
+    // Verify driver is now placed on commission hold in database
+    const driverHoldCheck = await db.execute({
+      sql: `SELECT is_hold, pending_commission_fee FROM drivers WHERE id = ?;`,
+      args: [otpDriverId]
+    });
+    if (!driverHoldCheck.rows[0].is_hold || driverHoldCheck.rows[0].pending_commission_fee !== expectedCommission) {
+      throw new Error(`Driver not placed on hold with commission fee: ${JSON.stringify(driverHoldCheck.rows[0])}`);
+    }
+
+    console.log(`[PASS] 48. End PIN & 10% Platform Commission: Verified End PIN, calculated ₹${expectedCommission} fee & placed driver on hold.`);
+    passed++;
+
+    // 49. Confirm Cash Collection & Commission Settle Workflow
+    const cashReq = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: {
+        action: 'confirm_cash',
+        bookingId: bkg.id
+      }
+    };
+    const cashRes = createMockRes();
+    await bookingsHandler(cashReq, cashRes);
+    if (cashRes.statusCode !== 200 || !cashRes.body?.cashCollected) {
+      throw new Error(`Confirm cash failed: ${JSON.stringify(cashRes.body)}`);
+    }
+
+    // Settle commission via admin approve endpoint
+    const settleHandler = await loadHandler('api/admin/approve.ts');
+    const settleReq = {
+      method: 'POST',
+      headers: { 'authorization': `Bearer ${adminToken}`, 'content-type': 'application/json' },
+      body: {
+        action: 'settle_commission',
+        driverId: otpDriverId
+      }
+    };
+    const settleRes = createMockRes();
+    await settleHandler(settleReq, settleRes);
+    if (settleRes.statusCode !== 200 || !settleRes.body?.success) {
+      throw new Error(`Settle commission failed: ${JSON.stringify(settleRes.body)}`);
+    }
+
+    const driverUnholdCheck = await db.execute({
+      sql: `SELECT is_hold, pending_commission_fee FROM drivers WHERE id = ?;`,
+      args: [otpDriverId]
+    });
+    if (driverUnholdCheck.rows[0].is_hold !== 0 || driverUnholdCheck.rows[0].pending_commission_fee !== 0) {
+      throw new Error(`Driver hold not lifted after commission settlement: ${JSON.stringify(driverUnholdCheck.rows[0])}`);
+    }
+
+    console.log(`[PASS] 49. Cash Confirmation & Settlement: Confirmed cash payment and successfully cleared platform commission hold.`);
+    passed++;
+
+    // 50. Structured Cancellation Reason Logging (PDF Rule 2)
+    const cancelBkgId = `LD-CANCEL-${Date.now()}`;
+    await db.execute({
+      sql: `INSERT INTO bookings (id, customer_name, customer_phone, driver_id, driver_name, service_title, pickup_location, destination_location, estimated_fare, status) VALUES (?, 'Cancel Customer', '9848099881', ?, 'OTP Test Driver', 'City Driver', 'Pickup', 'Drop', 400, 'Accepted');`,
+      args: [cancelBkgId, otpDriverId]
+    });
+
+    const cancelReq = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: {
+        action: 'cancel',
+        bookingId: cancelBkgId,
+        cancellationReason: 'Customer unreachable / phone off',
+        cancelledBy: 'driver'
+      }
+    };
+    const cancelRes = createMockRes();
+    await bookingsHandler(cancelReq, cancelRes);
+    if (cancelRes.statusCode !== 200 || cancelRes.body?.status !== 'Cancelled') {
+      throw new Error(`Cancellation action failed: ${JSON.stringify(cancelRes.body)}`);
+    }
+
+    const cancelDbCheck = await db.execute({
+      sql: `SELECT cancellation_reason, cancelled_by FROM bookings WHERE id = ?;`,
+      args: [cancelBkgId]
+    });
+    if (cancelDbCheck.rows[0].cancellation_reason !== 'Customer unreachable / phone off' || cancelDbCheck.rows[0].cancelled_by !== 'driver') {
+      throw new Error(`Cancellation reason not persisted correctly: ${JSON.stringify(cancelDbCheck.rows[0])}`);
+    }
+
+    console.log(`[PASS] 50. Structured Cancellation: Persisted cancellation reason & initiator to database.`);
+    passed++;
+
+    // 51. Real-time Dynamic Fare API (/api/fares)
+    const faresHandler = await loadHandler('api/fares.ts');
+    const getFaresRes = createMockRes();
+    await faresHandler({ method: 'GET', headers: {} }, getFaresRes);
+    if (getFaresRes.statusCode !== 200 || !getFaresRes.body?.fares?.hourlyRate) {
+      throw new Error(`GET /api/fares failed: ${JSON.stringify(getFaresRes.body)}`);
+    }
+
+    const postFaresRes = createMockRes();
+    await faresHandler({
+      method: 'POST',
+      headers: { 'authorization': `Bearer ${adminToken}`, 'content-type': 'application/json' },
+      body: { hourlyRate: 250, minimumHours: 2 }
+    }, postFaresRes);
+    if (postFaresRes.statusCode !== 200 || !postFaresRes.body?.success) {
+      throw new Error(`POST /api/fares update failed: ${JSON.stringify(postFaresRes.body)}`);
+    }
+
+    console.log(`[PASS] 51. Dynamic Real-time Fares API: Successfully queried and updated platform fare settings.`);
+    passed++;
+
+    // Clean up test records
+    await db.execute({ sql: `DELETE FROM bookings WHERE driver_id = ?;`, args: [otpDriverId] });
+    await db.execute({ sql: `DELETE FROM drivers WHERE id = ?;`, args: [otpDriverId] });
+  } catch (err) {
+    console.error(`[FAIL] New feature verification failed:`, err.message || err);
+    failed++;
+  }
+
   // Cleanup scratch safely
   try {
     if (fs.existsSync('scratch')) {

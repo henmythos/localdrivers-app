@@ -357,7 +357,46 @@ export const driversService = {
   },
 
   payCommissionFee(id: string, amount: number = 50): Driver | undefined {
+    this.settleCommissionAsync(id).catch(console.error);
     return dbService.payDriverCommissionFee(id, amount);
+  },
+
+  async settleCommissionAsync(id: string): Promise<boolean> {
+    const res = await apiClient.post<{ success: boolean; message?: string }>(
+      '/api/admin/approve',
+      { driverId: id, action: 'settle_commission' },
+      {
+        headers: authService.getAdminAuthHeaders(),
+        fallbackErrorMessage: 'Failed to settle commission and lift hold on server.',
+      }
+    );
+
+    if (res.success) {
+      dbService.updateDriverProfile(id, {
+        isHold: false,
+        pendingCommissionFee: 0,
+        status: 'Approved',
+      });
+      return true;
+    }
+    return false;
+  },
+
+  async setPaymentDetailsAsync(id: string, paymentLinkUrl?: string, upiId?: string): Promise<boolean> {
+    const res = await apiClient.post<{ success: boolean; message?: string }>(
+      '/api/admin/approve',
+      { driverId: id, action: 'set_payment_details', paymentLinkUrl, upiId },
+      {
+        headers: authService.getAdminAuthHeaders(),
+        fallbackErrorMessage: 'Failed to set payment details on server.',
+      }
+    );
+
+    if (res.success) {
+      dbService.updateDriverProfile(id, { paymentLinkUrl, upiId });
+      return true;
+    }
+    return false;
   },
 
   // Driver actions

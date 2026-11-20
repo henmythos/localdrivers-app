@@ -21,6 +21,7 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
   const [services, setServices] = useState<ServiceCategory[]>([]);
   const [selectedDriverForBooking, setSelectedDriverForBooking] = useState<Driver | null>(null);
   const [preselectedService, setPreselectedService] = useState<any>(undefined);
+  const [tripIntent, setTripIntent] = useState<'all' | 'city' | 'outstation'>('all');
   const [activeFilterChip, setActiveFilterChip] = useState<'all' | 'top_rated' | 'nearby' | 'available'>('all');
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -98,6 +99,8 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
   };
 
   const displayedDrivers = drivers.filter(d => {
+    if (tripIntent === 'city' && !d.services.includes('City Driver')) return false;
+    if (tripIntent === 'outstation' && !d.services.includes('Outstation Driver')) return false;
     if (activeFilterChip === 'top_rated') return d.rating >= 4.8;
     if (activeFilterChip === 'nearby') return d.distanceKm <= 5.0;
     if (activeFilterChip === 'available') return d.isOnline && d.currentWorkStatus !== 'on_trip';
@@ -372,6 +375,27 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
             </button>
           </div>
 
+          {/* TRIP INTENT TABS (PDF: Now vs For Later / In-City vs Outstation) */}
+          <div className="grid grid-cols-3 gap-2 p-1.5 bg-slate-200/80 rounded-2xl mb-3">
+            {[
+              { id: 'all', label: 'All Drivers' },
+              { id: 'city', label: 'Now / In-City (Hourly)' },
+              { id: 'outstation', label: 'For Later / Outstation' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setTripIntent(tab.id as any)}
+                className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all text-center truncate ${
+                  tripIntent === tab.id
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
           {/* REAL-TIME FILTER CHIPS (Section 4.1.4) */}
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none mb-3">
             {[
@@ -480,6 +504,7 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
         <BookingModal
           driver={selectedDriverForBooking}
           preselectedService={preselectedService}
+          initialUserLocation={userLocation}
           onClose={() => {
             setSelectedDriverForBooking(null);
             setPreselectedService(undefined);

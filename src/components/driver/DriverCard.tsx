@@ -69,11 +69,13 @@ export const DriverCard: React.FC<DriverCardProps> = ({ driver, onSelect, onBook
               <span className="font-medium text-slate-600">{driver.experienceYears}+ yrs exp</span>
             </div>
 
-            {/* Distance & Area */}
+            {/* Distance & Area (PDF Rule 8: Living Area) */}
             <div className="flex items-center gap-1 text-xs text-slate-500 mt-2">
               <MapPin className="w-3.5 h-3.5 text-brand-600 shrink-0" />
               <span className="font-bold text-brand-700">{driver.distanceKm} km away</span>
-              <span className="text-slate-400">({driver.area})</span>
+              <span className="text-slate-500">
+                • Coming from: <strong className="text-slate-800">{driver.livingArea || driver.area}</strong>
+              </span>
             </div>
           </div>
         </div>

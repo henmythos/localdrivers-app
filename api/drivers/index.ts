@@ -200,11 +200,16 @@ export default async function handler(req: any, res: any) {
           status: String(row.status),
           isOnline: Boolean(row.is_online),
           isHold: Boolean(row.is_hold),
+          pendingCommissionFee: Number(row.pending_commission_fee) || 0,
           startingPrice: Number(row.starting_price) || 299,
           distanceKm: Number(row.distance_km) || 2.5,
           latitude: Number(row.latitude) || 17.4126,
           longitude: Number(row.longitude) || 78.4071,
-          area: String(row.area || 'Hyderabad'),
+          area: String(row.living_area || row.area || 'Hyderabad'),
+          livingArea: String(row.living_area || row.area || 'Hyderabad'),
+          outstationNoticeDays: Number(row.outstation_notice_days) || 1,
+          paymentLinkUrl: String(row.payment_link_url || ''),
+          upiId: String(row.upi_id || ''),
           city: String(row.city || 'Hyderabad'),
           verificationBadge: Boolean(row.verification_badge),
           description: String(row.description || ''),
@@ -212,6 +217,15 @@ export default async function handler(req: any, res: any) {
           currentWorkStatus: String(row.current_work_status || 'available'),
           activeBookingId: row.active_booking_id ? String(row.active_booking_id) : null,
         });
+      }
+
+      // Algorithm: Fair Equal Visibility Rotation on every search refresh (PDF Rule 4)
+      // Shuffles active approved drivers so every driver gets equal exposure and fair position rotation
+      if (statusParam === 'Approved' && !idParam && drivers.length > 1) {
+        for (let i = drivers.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [drivers[i], drivers[j]] = [drivers[j], drivers[i]];
+        }
       }
 
       if (idParam && drivers.length > 0) {

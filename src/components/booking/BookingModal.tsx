@@ -6,7 +6,7 @@ import {
   Car, ShieldCheck, ArrowRight, ArrowLeft, Star, Plus, Trash2, 
   RotateCcw, Compass, Map, ExternalLink, Hourglass, Info, AlertCircle 
 } from 'lucide-react';
-import { Driver, ServiceType, Booking, TripStop, AdminPricingConfig } from '../../types';
+import { Driver, ServiceType, Booking, TripStop, AdminPricingConfig, UserLocation } from '../../types';
 import { bookingsService } from '../../services/bookings';
 import { dbService } from '../../services/database';
 import { RouteMap } from '../map/RouteMap';
@@ -20,6 +20,7 @@ import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 interface BookingModalProps {
   driver: Driver;
   preselectedService?: ServiceType;
+  initialUserLocation?: UserLocation;
   onClose: () => void;
   onBookingComplete: (booking: Booking) => void;
 }
@@ -27,6 +28,7 @@ interface BookingModalProps {
 export const BookingModal: React.FC<BookingModalProps> = ({
   driver,
   preselectedService,
+  initialUserLocation,
   onClose,
   onBookingComplete,
 }) => {
@@ -41,11 +43,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [customerName, setCustomerName] = useState(() => localStorage.getItem('localdrivers_customer_name') || '');
   const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('localdrivers_verified_customer_phone') || '');
   
-  // Locations and Coordinates (sync both address AND coordinates from stored user location)
-  const initialStoredLocation = locationService.getStoredLocation();
+  // Locations and Coordinates (sync both address AND coordinates from stored or prop user location)
+  const initialStoredLocation = initialUserLocation || locationService.getStoredLocation();
   const hasExplicitStoredPickup = Boolean(
     initialStoredLocation?.address &&
-    !initialStoredLocation.isFallback &&
     initialStoredLocation.latitude &&
     initialStoredLocation.longitude
   );
@@ -86,6 +87,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [date, setDate] = useState<string>(todayStr);
   const [time, setTime] = useState<string>('Instant ASAP (Within 15 Mins)');
   const [transmission, setTransmission] = useState<'Manual' | 'Automatic'>('Manual');
+  const [vehicleType, setVehicleType] = useState<string>('Sedan');
   const [vehicleModel, setVehicleModel] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -349,6 +351,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       customerPhone,
       pickupLocation,
       destinationLocation,
+      vehicleType,
+      vehicleModel: vehicleModel.trim() || undefined,
       date,
       time,
       notes: fullNotes,
@@ -969,6 +973,29 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   </div>
                 </div>
 
+                {/* Vehicle Type (PDF: Vehicle Type & Model) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Vehicle Type
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {['Hatchback', 'Sedan', 'SUV', 'Luxury'].map((vCat) => (
+                      <button
+                        type="button"
+                        key={vCat}
+                        onClick={() => setVehicleType(vCat)}
+                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-center ${
+                          vehicleType === vCat
+                            ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        {vCat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Vehicle Model */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -1556,9 +1583,22 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               </div>
 
               <h4 className="text-2xl font-black text-slate-900 mb-1">Booking Dispatched</h4>
-              <p className="text-xs text-slate-600 max-w-xs mx-auto mb-5">
+              <p className="text-xs text-slate-600 max-w-xs mx-auto mb-4">
                 Your driver request is confirmed and dispatched to {driver.name}.
               </p>
+
+              {/* VIRTUAL PICKUP OTP (PDF Rule: 6-char alphanumeric 1AB2C3) */}
+              <div className="bg-gradient-to-r from-brand-600 to-indigo-700 text-white rounded-2xl p-4 text-center max-w-sm mx-auto mb-5 shadow-lg">
+                <span className="text-[10px] font-black uppercase tracking-wider text-brand-200 block">
+                  Virtual Pickup OTP (Share on Arrival)
+                </span>
+                <span className="text-3xl font-black font-mono tracking-widest text-white block mt-1">
+                  {createdBooking.pickupOtp || '1AB2C3'}
+                </span>
+                <span className="text-[11px] text-brand-100 block mt-1">
+                  Share this 6-character code with {driver.name} upon arrival to board and start your trip.
+                </span>
+              </div>
 
               <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-left max-w-sm mx-auto space-y-2 mb-6 text-xs">
                 <div className="flex justify-between items-center">

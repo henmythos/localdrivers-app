@@ -44,6 +44,8 @@ export const DriverRegisterPage: React.FC = () => {
     phone: '',
     email: '',
     area: 'Jubilee Hills',
+    livingArea: 'Jubilee Hills',
+    outstationNoticeDays: 1,
     experienceYears: 5,
     description: '',
   });
@@ -241,6 +243,8 @@ export const DriverRegisterPage: React.FC = () => {
         latitude: 17.4126,
         longitude: 78.4071,
         area: formData.area.trim() || 'Hyderabad',
+        livingArea: formData.livingArea.trim() || formData.area.trim() || 'Hyderabad',
+        outstationNoticeDays: Number(formData.outstationNoticeDays) || 1,
         city: 'Hyderabad',
         experienceYears: Number(formData.experienceYears) || 1,
         languages: selectedLanguages,
@@ -658,39 +662,80 @@ export const DriverRegisterPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Primary Area in Hyderabad *
+                  Home Living Area / Neighbourhood (Hyderabad) *
                 </label>
-                <div className="relative">
+                <div className="relative mb-2">
                   <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                   <input
                     type="text"
                     required
-                    value={formData.area}
-                    onChange={e => setFormData({ ...formData, area: e.target.value })}
-                    placeholder="e.g. Jubilee Hills, Banjara Hills, Gachibowli"
+                    value={formData.livingArea}
+                    onChange={e => setFormData({ ...formData, livingArea: e.target.value, area: e.target.value })}
+                    placeholder="e.g. Attapur, Kachiguda, Secunderabad, Shamshabad"
                     className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 text-xs font-medium"
                   />
                 </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Attapur', 'Kachiguda', 'Secunderabad', 'Shamshabad',
+                    'Madhapur', 'Gachibowli', 'Kukatpally', 'Banjara Hills',
+                    'Jubilee Hills', 'Mehdipatnam'
+                  ].map(locality => (
+                    <button
+                      type="button"
+                      key={locality}
+                      onClick={() => setFormData({ ...formData, livingArea: locality, area: locality })}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                        formData.livingArea === locality
+                          ? 'bg-brand-600 text-white border-brand-600'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {locality}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Used by dispatch radar to calculate customer proximity without leaking your private address.
+                </span>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Experience (Years) *
-                </label>
-                <div className="relative">
-                  <Briefcase className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                  <input
-                    type="number"
-                    min="1"
-                    max="40"
-                    required
-                    value={formData.experienceYears}
-                    onChange={e => setFormData({ ...formData, experienceYears: Number(e.target.value) })}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 text-xs font-medium"
-                  />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Experience (Years) *
+                  </label>
+                  <div className="relative">
+                    <Briefcase className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                    <input
+                      type="number"
+                      min="1"
+                      max="40"
+                      required
+                      value={formData.experienceYears}
+                      onChange={e => setFormData({ ...formData, experienceYears: Number(e.target.value) })}
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 text-xs font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Outstation Advance Notice Required
+                  </label>
+                  <select
+                    value={formData.outstationNoticeDays}
+                    onChange={e => setFormData({ ...formData, outstationNoticeDays: Number(e.target.value) })}
+                    className="w-full px-3 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 text-xs font-medium bg-white"
+                  >
+                    <option value={0}>Same Day (Instant Outstation)</option>
+                    <option value={1}>1 Day in Advance (Standard)</option>
+                    <option value={2}>2 Days in Advance</option>
+                    <option value={3}>3 Days in Advance</option>
+                  </select>
                 </div>
               </div>
             </div>

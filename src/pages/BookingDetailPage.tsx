@@ -5,7 +5,7 @@ import {
   ArrowLeft, Calendar, Clock, MapPin, Navigation, Phone, 
   ShieldCheck, CheckCircle2, AlertCircle, Car, ShieldAlert, 
   Hash, Lock, Search, AlertTriangle, Play, Square, RotateCcw, 
-  HelpCircle, Receipt, ExternalLink, Compass, X 
+  HelpCircle, Receipt, ExternalLink, Compass, X, Key 
 } from 'lucide-react';
 import { Booking } from '../types';
 import { bookingsService, parseUtcTimestampMs } from '../services/bookings';
@@ -37,9 +37,15 @@ export const BookingDetailPage: React.FC = () => {
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputeReason, setDisputeReason] = useState('');
 
-  useBodyScrollLock(showEndTripModal || showDisputeModal, () => {
+  // Cancellation Modal State
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('Plans changed / no longer required');
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  useBodyScrollLock(showEndTripModal || showDisputeModal || showCancelModal, () => {
     setShowEndTripModal(false);
     setShowDisputeModal(false);
+    setShowCancelModal(false);
   });
 
   const [nowTimestamp, setNowTimestamp] = useState(Date.now());
@@ -191,6 +197,21 @@ export const BookingDetailPage: React.FC = () => {
     bookingsService.raiseDispute(booking.id, disputeReason.trim());
     setShowDisputeModal(false);
     setDisputeReason('');
+  };
+
+  // Customer Cancel Booking (PDF Rule 2)
+  const handleCancelBooking = async () => {
+    if (!booking) return;
+    setIsCancelling(true);
+    try {
+      await bookingsService.cancelBookingAsync(booking.id, cancelReason, 'customer');
+      setShowCancelModal(false);
+      await loadBooking();
+    } catch (err: any) {
+      alert(err.message || 'Failed to cancel booking.');
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   if (!booking) {
@@ -356,9 +377,88 @@ export const BookingDetailPage: React.FC = () => {
                 Under Dispute Review
               </span>
             )}
+            {booking.status === 'Cancelled' && (
+              <span className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-slate-700 text-slate-200 border border-slate-600">
+                Booking Cancelled
+              </span>
+            )}
           </div>
         </div>
       </div>
+
+      {/* CANCELLED BANNER */}
+      {booking.status === 'Cancelled' && (
+        <div className="mb-6 p-4 rounded-2xl bg-slate-100 border border-slate-300 text-slate-800 space-y-1">
+          <div className="flex items-center gap-2 font-black text-sm text-slate-900">
+            <AlertCircle className="w-4 h-4 text-slate-600" />
+            <span>Booking Cancelled</span>
+          </div>
+          <p className="text-xs text-slate-600">
+            <strong>Reason:</strong> {booking.cancellationReason || 'Ride was cancelled'}
+            {booking.cancelledBy ? ` • Cancelled by ${booking.cancelledBy}` : ''}
+          </p>
+        </div>
+      )}
+
+      {/* VIRTUAL PICKUP OTP CARD (PDF Rule: 6-char alphanumeric 1AB2C3) */}
+      {(booking.status === 'Pending' || booking.status === 'Accepted') && (
+        <div className="bg-gradient-to-r from-brand-600 to-indigo-700 text-white rounded-3xl p-6 shadow-xl mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/20 text-white mb-2">
+                <Key className="w-3.5 h-3.5" />
+                <span>Virtual Pickup OTP (Step 1 Verification)</span>
+              </div>
+              <h3 className="text-lg font-black">Share with driver upon arrival</h3>
+              <p className="text-xs text-brand-100 mt-1 max-w-md">
+                Give this 6-character code to {booking.driverName} when they reach your pickup point to verify identity and start your trip.
+              </p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl text-center shrink-0">
+              <span className="text-[10px] uppercase font-bold text-brand-200 block">Pickup OTP</span>
+              <span className="text-3xl font-black font-mono tracking-widest text-white block mt-0.5">
+                {booking.pickupOtp || '1AB2C3'}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+            <span className="text-[11px] text-brand-200">
+              Need to change your plans? You can cancel before the driver starts the trip.
+            </span>
+            <button
+              onClick={() => setShowCancelModal(true)}
+              className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl border border-white/20 transition-colors"
+            >
+              Cancel Booking
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* END TRIP VIRTUAL PIN CARD (PDF Rule: 6-digit numeric PIN) */}
+      {isTripActive && (
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-3xl p-6 shadow-xl mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/20 text-white mb-2">
+                <Lock className="w-3.5 h-3.5" />
+                <span>End Trip Virtual PIN (Step 2 Completion)</span>
+              </div>
+              <h3 className="text-lg font-black">Your Confidential End PIN</h3>
+              <p className="text-xs text-emerald-100 mt-1 max-w-md">
+                When your journey and waiting time are finished, share this 6-digit PIN with your driver to complete the ride and generate your final bill.
+              </p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl text-center shrink-0">
+              <span className="text-[10px] uppercase font-bold text-emerald-200 block">End Trip PIN</span>
+              <span className="text-3xl font-black font-mono tracking-widest text-white block mt-0.5">
+                {booking.endOtp || '------'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* LIVE TRIP TIMER & CHARGES (Active Trip or Completed Summary) */}
       {(isTripActive || booking.status === 'Completed') && (
@@ -619,6 +719,22 @@ export const BookingDetailPage: React.FC = () => {
               </div>
             )}
 
+            <div className="flex justify-between items-center text-slate-600">
+              <span>Payment Mode:</span>
+              <span className="font-extrabold text-brand-700 uppercase">Cash to Driver</span>
+            </div>
+
+            <div className="flex justify-between items-center text-slate-600">
+              <span>Payment Collection Status:</span>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                booking.cashCollected
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+              }`}>
+                {booking.cashCollected ? 'Cash Payment Received • Ride Closed' : 'Awaiting Driver Cash Receipt Confirmation'}
+              </span>
+            </div>
+
             <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-sm font-black">
               <span className="text-slate-900">Total Final Fare:</span>
               <span className="text-xl text-emerald-700">₹{booking.finalFare || liveBilling.totalEstimatedOrFinal}</span>
@@ -786,6 +902,80 @@ export const BookingDetailPage: React.FC = () => {
           driverCode={booking.driverCode || 'A1B2C3'}
           bookingId={booking.id}
         />
+      )}
+
+      {/* CUSTOMER CANCELLATION MODAL (PDF Rule 2: Structured Reasons) */}
+      {showCancelModal && createPortal(
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowCancelModal(false);
+          }}
+          className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in overflow-y-auto overscroll-contain"
+        >
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-auto max-h-[92vh] flex flex-col overflow-y-auto overscroll-contain animate-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto shrink-0">
+              <AlertTriangle className="w-6 h-6 stroke-[2.2]" />
+            </div>
+
+            <div className="text-center shrink-0">
+              <h3 className="text-lg font-black text-slate-900">Cancel Booking?</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Please let us know why you need to cancel. Your feedback helps maintain driver accountability.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-black text-slate-800">
+                Reason for Cancellation *
+              </label>
+              {[
+                'Plans changed / no longer required',
+                'Driver delayed / not responding to calls',
+                'Booked by mistake / wrong date or time',
+                'Found alternate transportation',
+                'Emergency / unforeseen issue',
+              ].map((reasonOption) => (
+                <label
+                  key={reasonOption}
+                  onClick={() => setCancelReason(reasonOption)}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                    cancelReason === reasonOption
+                      ? 'border-brand-600 bg-brand-50 text-brand-900 font-black ring-1 ring-brand-500'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="cancelReason"
+                    checked={cancelReason === reasonOption}
+                    onChange={() => setCancelReason(reasonOption)}
+                    className="text-brand-600 focus:ring-brand-500"
+                  />
+                  <span>{reasonOption}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex gap-2 pt-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowCancelModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Keep Booking
+              </button>
+              <button
+                type="button"
+                disabled={isCancelling}
+                onClick={handleCancelBooking}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-extrabold shadow-md disabled:opacity-50"
+              >
+                {isCancelling ? 'Cancelling...' : 'Confirm Cancellation'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
     </div>

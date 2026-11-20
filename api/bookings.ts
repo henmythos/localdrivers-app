@@ -12,6 +12,21 @@ function toIsoUtc(ts: any): string {
   return str;
 }
 
+// 6-digit alphanumeric Virtual Pickup OTP: 1AB2C3 style (excludes ambiguous characters 0, 1, I, O)
+export function generatePickupOtp(): string {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
+// 6-digit numeric Virtual End PIN to stop the job and finalize fare
+export function generateEndOtp(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 export default async function handler(req: any, res: any) {
   const reqId = `bkg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -90,6 +105,19 @@ export default async function handler(req: any, res: any) {
           notes: String(row.notes || ''),
           estimatedFare: Number(row.estimated_fare) || 0,
           finalFare: row.final_fare != null ? Number(row.final_fare) : undefined,
+          pickupOtp: row.pickup_otp || extraData.pickupOtp || '',
+          endOtp: row.end_otp || extraData.endOtp || '',
+          cancellationReason: row.cancellation_reason || extraData.cancellationReason || '',
+          cancelledBy: row.cancelled_by || extraData.cancelledBy || '',
+          cancellationDetails: row.cancellation_details || extraData.cancellationDetails || '',
+          commissionFee: row.commission_fee != null ? Number(row.commission_fee) : (extraData.commissionFee != null ? Number(extraData.commissionFee) : 0),
+          commissionSettled: Boolean(row.commission_settled || extraData.commissionSettled),
+          cashCollected: Boolean(row.cash_collected || extraData.cashCollected),
+          cashCollectedAt: row.cash_collected_at || extraData.cashCollectedAt || null,
+          paymentMethod: row.payment_method || extraData.paymentMethod || 'cash',
+          paymentStatus: row.payment_status || extraData.paymentStatus || 'pending',
+          vehicleType: row.vehicle_type || extraData.vehicleType || '',
+          vehicleModel: row.vehicle_model || extraData.vehicleModel || '',
           tripStartTime: row.trip_start_time ? toIsoUtc(row.trip_start_time) : undefined,
           tripEndTime: row.trip_end_time ? toIsoUtc(row.trip_end_time) : undefined,
           tripDurationMinutes: row.trip_duration_minutes != null ? Number(row.trip_duration_minutes) : undefined,
@@ -123,7 +151,7 @@ export default async function handler(req: any, res: any) {
 
       // 1. ACTION: START TRIP
       if (action === 'start' || action === 'start_trip') {
-        const { bookingId, location } = body;
+        const { bookingId, location, otp, pickupOtp } = body;
         if (!bookingId) {
           return res.status(400).json({ success: false, error: 'bookingId is required.' });
         }
@@ -139,6 +167,17 @@ export default async function handler(req: any, res: any) {
 
         const booking = bkgRes.rows[0];
         const bkgDriverId = String(booking.driver_id);
+
+        // Virtual 6-digit alphanumeric Pickup OTP Verification
+        const enteredOtp = String(otp || pickupOtp || '').trim().toUpperCase();
+        const expectedOtp = String(booking.pickup_otp || '').trim().toUpperCase();
+        if (enteredOtp && expectedOtp && enteredOtp !== expectedOtp) {
+          return res.status(400).json({
+            success: false,
+            error: `Invalid Pickup OTP (${enteredOtp}). Please ask the customer for the correct 6-digit Virtual OTP.`,
+          });
+        }
+
         const nowIso = new Date().toISOString();
         const startLat = location?.latitude || null;
         const startLon = location?.longitude || null;
@@ -173,13 +212,14 @@ export default async function handler(req: any, res: any) {
           status: 'In Progress',
           tripStartTime: nowIso,
           driverWorkStatus: 'on_trip',
+          endOtp: String(booking.end_otp || ''),
           message: 'Trip started successfully. Authoritative timer active.',
         });
       }
 
       // 2. ACTION: COMPLETE TRIP
       if (action === 'complete' || action === 'complete_trip') {
-        const { bookingId, location } = body;
+        const { bookingId, location, endOtp, endPin } = body;
         if (!bookingId) {
           return res.status(400).json({ success: false, error: 'bookingId is required.' });
         }
@@ -195,6 +235,17 @@ export default async function handler(req: any, res: any) {
 
         const booking = bkgRes.rows[0];
         const bkgDriverId = String(booking.driver_id);
+
+        // Virtual 6-digit numeric End PIN Verification
+        const enteredPin = String(endOtp || endPin || '').trim();
+        const expectedPin = String(booking.end_otp || '').trim();
+        if (enteredPin && expectedPin && enteredPin !== expectedPin) {
+          return res.status(400).json({
+            success: false,
+            error: `Invalid End PIN (${enteredPin}). Please ask customer for the correct 6-digit End PIN to finish trip.`,
+          });
+        }
+
         const nowIso = new Date().toISOString();
         const endLat = location?.latitude || null;
         const endLon = location?.longitude || null;
@@ -228,6 +279,9 @@ export default async function handler(req: any, res: any) {
           finalFare = Math.max(estimatedFare, calculatedCharge);
         }
 
+        // 10% Platform Commission Fee (Blueprint Admin Rule)
+        const commissionFee = Math.round(finalFare * 0.10);
+
         await db.execute({
           sql: `
             UPDATE bookings 
@@ -235,19 +289,18 @@ export default async function handler(req: any, res: any) {
                 trip_end_time = ?,
                 trip_duration_minutes = ?,
                 final_fare = ?,
+                commission_fee = ?,
                 end_latitude = ?,
                 end_longitude = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?;
           `,
-          args: [nowIso, durationMinutes, finalFare, endLat, endLon, bookingId],
+          args: [nowIso, durationMinutes, finalFare, commissionFee, endLat, endLon, bookingId],
         });
 
-        // Driver availability restoration:
-        // A driver who was Offline before or during the trip remains Offline after completion.
-        // A driver who was Online returns to availability ONLY IF no conflicting booking exists.
+        // Driver availability restoration & 10% Platform Commission Hold enforcement
         const driverRes = await db.execute({
-          sql: `SELECT id, is_online, status, is_hold FROM drivers WHERE id = ?`,
+          sql: `SELECT id, is_online, status, is_hold, pending_commission_fee FROM drivers WHERE id = ?`,
           args: [bkgDriverId],
         });
 
@@ -277,10 +330,12 @@ export default async function handler(req: any, res: any) {
             SET current_work_status = ?,
                 active_booking_id = ?,
                 total_trips = total_trips + 1,
+                pending_commission_fee = COALESCE(pending_commission_fee, 0) + ?,
+                is_hold = 1,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?;
           `,
-          args: [nextWorkStatus, nextActiveBookingId, bkgDriverId],
+          args: [nextWorkStatus, nextActiveBookingId, commissionFee, bkgDriverId],
         });
 
         return res.status(200).json({
@@ -289,9 +344,42 @@ export default async function handler(req: any, res: any) {
           status: 'Completed',
           tripDurationMinutes: durationMinutes,
           finalFare,
+          commissionFee,
           driverWorkStatus: nextWorkStatus,
           driverIsOnline,
-          message: 'Trip completed. Active-job restriction released.',
+          isHold: true,
+          pendingCommissionFee: commissionFee,
+          message: 'Trip completed. Final bill calculated. Driver placed on 10% commission hold pending settlement.',
+        });
+      }
+
+      // 3. ACTION: CONFIRM CASH PAYMENT (Unified Shared State Confirmation)
+      if (action === 'confirm_cash' || action === 'collect_cash') {
+        const { bookingId } = body;
+        if (!bookingId) {
+          return res.status(400).json({ success: false, error: 'bookingId is required.' });
+        }
+
+        const nowIso = new Date().toISOString();
+        await db.execute({
+          sql: `
+            UPDATE bookings 
+            SET cash_collected = 1,
+                cash_collected_at = ?,
+                payment_status = 'paid',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?;
+          `,
+          args: [nowIso, bookingId],
+        });
+
+        return res.status(200).json({
+          success: true,
+          bookingId,
+          cashCollected: true,
+          cashCollectedAt: nowIso,
+          paymentStatus: 'paid',
+          message: 'Cash payment confirmed by driver. Ride fully closed.',
         });
       }
 
@@ -453,13 +541,14 @@ export default async function handler(req: any, res: any) {
         }
 
         // No other online drivers available -> Cancel booking cleanly so it does not ghost-loop on the rejecting driver
+        const passReason = String(body.reason || body.cancellationReason || 'Driver passed booking request').trim();
         const cancelledDataJson = JSON.stringify({
           ...extraData,
           rejectedDriverIds,
         });
         await db.execute({
-          sql: `UPDATE bookings SET status = 'Cancelled', data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
-          args: [cancelledDataJson, bookingId],
+          sql: `UPDATE bookings SET status = 'Cancelled', cancellation_reason = ?, cancelled_by = 'driver', data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
+          args: [passReason, cancelledDataJson, bookingId],
         });
 
         return res.status(200).json({
@@ -473,7 +562,7 @@ export default async function handler(req: any, res: any) {
 
       // 5. ACTION: CANCEL BOOKING
       if (action === 'cancel' || action === 'cancel_booking') {
-        const { bookingId } = body;
+        const { bookingId, reason, cancellationReason, cancelledBy, details } = body;
         if (!bookingId) {
           return res.status(400).json({ success: false, error: 'bookingId is required.' });
         }
@@ -489,10 +578,21 @@ export default async function handler(req: any, res: any) {
 
         const booking = bkgRes.rows[0];
         const bkgDriverId = String(booking.driver_id);
+        const cleanReason = String(reason || cancellationReason || 'Customer cancelled booking').trim();
+        const whoCancelled = String(cancelledBy || 'customer').trim();
+        const extraDetails = details ? String(details).trim() : null;
 
         await db.execute({
-          sql: `UPDATE bookings SET status = 'Cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?;`,
-          args: [bookingId],
+          sql: `
+            UPDATE bookings 
+            SET status = 'Cancelled',
+                cancellation_reason = ?,
+                cancelled_by = ?,
+                cancellation_details = ?,
+                updated_at = CURRENT_TIMESTAMP 
+            WHERE id = ?;
+          `,
+          args: [cleanReason, whoCancelled, extraDetails, bookingId],
         });
 
         // Release driver assignment if this was their active booking
@@ -647,8 +747,17 @@ export default async function handler(req: any, res: any) {
 
       // Insert booking into database with automatic rollback if insert fails
       const nowIso = new Date().toISOString();
+      const pickupOtp = generatePickupOtp();
+      const endOtp = generateEndOtp();
+      const vehicleType = String(body.vehicleType || otherDetails.vehicleType || 'Sedan');
+      const vehicleModel = String(body.vehicleModel || otherDetails.vehicleModel || '');
+
       const dataJson = JSON.stringify({
         ...(otherDetails || {}),
+        pickupOtp,
+        endOtp,
+        vehicleType,
+        vehicleModel,
         assignedAt: nowIso,
       });
       try {
@@ -659,8 +768,9 @@ export default async function handler(req: any, res: any) {
               driver_phone, driver_photo, driver_code, service_title,
               status, pickup_location, destination_location, date, time,
               notes, estimated_fare, idempotency_key, data_json,
+              pickup_otp, end_otp, vehicle_type, vehicle_model,
               created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
           `,
           args: [
             bookingId,
@@ -680,6 +790,10 @@ export default async function handler(req: any, res: any) {
             Number(estimatedFare) || 299,
             idempotencyKey || bookingId,
             dataJson,
+            pickupOtp,
+            endOtp,
+            vehicleType,
+            vehicleModel,
             nowIso,
             nowIso,
           ],
@@ -721,6 +835,12 @@ export default async function handler(req: any, res: any) {
         time: time || '',
         notes: notes || '',
         estimatedFare: Number(estimatedFare) || 299,
+        pickupOtp,
+        endOtp,
+        vehicleType,
+        vehicleModel,
+        paymentMethod: 'cash',
+        paymentStatus: 'pending',
         createdAt: nowIso,
         updatedAt: nowIso,
         assignedAt: nowIso,
