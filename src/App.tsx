@@ -43,6 +43,7 @@ import { DataDeletionPage } from './pages/legal/DataDeletionPage';
 import { useUser, useAuth } from '@clerk/react';
 import { authService } from './services/auth';
 import { customerService } from './services/customer';
+import { nativeAuth } from './services/nativeAuth';
 
 const ClerkAdminSync: React.FC = () => {
   const { user, isLoaded, isSignedIn } = useUser();
@@ -78,6 +79,11 @@ const ClerkAdminSync: React.FC = () => {
 export const App: React.FC = () => {
   const [userLocation, setUserLocation] = useState<UserLocation>(() => locationService.getStoredLocation());
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+
+  useEffect(() => {
+    const cleanup = nativeAuth.initDeepLinkListener();
+    return () => cleanup();
+  }, []);
 
   const handleOpenLocationModal = () => {
     setIsLocationModalOpen(true);
