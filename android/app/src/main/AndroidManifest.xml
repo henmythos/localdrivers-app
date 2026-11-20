@@ -56,6 +56,16 @@
                 <data android:scheme="in.localdrivers.app" />
             </intent-filter>
 
+            <!-- Android App Links for localdrivers.in and localdrivers-app.vercel.app -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="localdrivers.in" />
+                <data android:scheme="https" android:host="www.localdrivers.in" />
+                <data android:scheme="https" android:host="localdrivers-app.vercel.app" />
+            </intent-filter>
+
         </activity>
 
         <provider

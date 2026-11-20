@@ -5,7 +5,11 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/.well-known/assetlinks.json",
+      "destination": "/api/assetlinks"
+    },
+    {
+      "source": "/((?!api/|\\.well-known/).*)",
       "destination": "/index.html"
     }
   ],
@@ -24,6 +28,19 @@
         {
           "key": "X-XSS-Protection",
           "value": "1; mode=block"
+        }
+      ]
+    },
+    {
+      "source": "/.well-known/assetlinks.json",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
         }
       ]
     },

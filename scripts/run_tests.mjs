@@ -1688,6 +1688,30 @@ async function main() {
     console.log(`[PASS] 55. Admin Customers Analytics: Retrieved unified customer records with live booking frequency.`);
     passed++;
 
+    // 56. Digital Asset Links Verification (/api/assetlinks & public/.well-known/assetlinks.json)
+    const assetlinksHandler = await loadHandler('api/assetlinks.ts');
+    const assetlinksRes = createMockRes();
+    await assetlinksHandler({ method: 'GET', headers: {} }, assetlinksRes);
+    if (assetlinksRes.statusCode !== 200 || !Array.isArray(assetlinksRes.body)) {
+      throw new Error(`Assetlinks handler failed: HTTP ${assetlinksRes.statusCode}`);
+    }
+    const statement = assetlinksRes.body[0];
+    if (statement?.target?.package_name !== 'in.localdrivers.app' || !statement?.target?.sha256_cert_fingerprints?.includes('12:7D:2C:59:60:67:C8:8B:34:BB:DB:D3:30:32:5E:33:4A:90:36:EC:9D:52:FE:F8:BB:55:D0:82:6F:85:DB:32')) {
+      throw new Error(`Assetlinks content invalid: ${JSON.stringify(statement)}`);
+    }
+
+    const staticAssetPath = path.resolve('public/.well-known/assetlinks.json');
+    if (!fs.existsSync(staticAssetPath)) {
+      throw new Error(`Missing static assetlinks.json at ${staticAssetPath}`);
+    }
+    const staticContent = JSON.parse(fs.readFileSync(staticAssetPath, 'utf8'));
+    if (!Array.isArray(staticContent) || staticContent[0]?.target?.package_name !== 'in.localdrivers.app') {
+      throw new Error(`Static assetlinks.json content invalid`);
+    }
+
+    console.log(`[PASS] 56. Digital Asset Links: Verified /.well-known/assetlinks.json and API endpoint for in.localdrivers.app.`);
+    passed++;
+
     // Clean up test records
     await db.execute({ sql: `DELETE FROM bookings WHERE driver_id = ? OR customer_email = ?;`, args: [otpDriverId, testCustEmail] });
     await db.execute({ sql: `DELETE FROM customers WHERE email = ?;`, args: [testCustEmail] });
