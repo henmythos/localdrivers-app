@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1051897287119",
+    "project_id": "localdrivers26",
+    "storage_bucket": "localdrivers26.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1051897287119:android:0b6d1f108d5fe1756d82ba",
+        "android_client_info": {
+          "package_name": "in.localdrivers.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQL8viVWEqOWQ3P1eVl48v2B9KwtEQIZM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
