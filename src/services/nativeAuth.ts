@@ -2,7 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { App as CapApp } from '@capacitor/app';
 
-export const GOOGLE_CLIENT_ID = '577882724103-bevg4ia8jafh1thjr2dso1t8a6vcicrj.apps.googleusercontent.com';
+export const GOOGLE_CLIENT_ID = '1051897287119-f63j3d036r3ksbd28csd3itg8f9paug7.apps.googleusercontent.com';
 
 export const nativeAuth = {
   getGoogleClientId(): string {

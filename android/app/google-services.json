@@ -12,7 +12,12 @@
           "package_name": "in.localdrivers.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1051897287119-f63j3d036r3ksbd28csd3itg8f9paug7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDQL8viVWEqOWQ3P1eVl48v2B9KwtEQIZM"
@@ -20,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1051897287119-f63j3d036r3ksbd28csd3itg8f9paug7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

@@ -4,6 +4,6 @@
     <string name="title_activity_main">LocalDrivers</string>
     <string name="package_name">in.localdrivers.app</string>
     <string name="custom_url_scheme">in.localdrivers.app</string>
-    <string name="server_client_id">577882724103-bevg4ia8jafh1thjr2dso1t8a6vcicrj.apps.googleusercontent.com</string>
-    <string name="google_client_id">577882724103-bevg4ia8jafh1thjr2dso1t8a6vcicrj.apps.googleusercontent.com</string>
+    <string name="server_client_id">1051897287119-f63j3d036r3ksbd28csd3itg8f9paug7.apps.googleusercontent.com</string>
+    <string name="google_client_id">1051897287119-f63j3d036r3ksbd28csd3itg8f9paug7.apps.googleusercontent.com</string>
 </resources>
