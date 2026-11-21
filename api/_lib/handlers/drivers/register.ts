@@ -1,6 +1,6 @@
-import { initDb } from '../_lib/db.js';
-import { uploadFileBuffer, parseDataUrl } from '../_lib/storage.js';
-import { hashPassword, cleanEnvValue } from '../_lib/auth.js';
+import { initDb } from '../../db.js';
+import { uploadFileBuffer, parseDataUrl } from '../../storage.js';
+import { hashPassword, cleanEnvValue } from '../../auth.js';
 
 function generateDriverCode(): string {
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';

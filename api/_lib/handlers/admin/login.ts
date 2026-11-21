@@ -1,4 +1,4 @@
-import { generateAdminToken, cleanEnvValue, getAuthSecret } from '../_lib/auth.js';
+import { generateAdminToken, cleanEnvValue, getAuthSecret } from '../../auth.js';
 
 export default async function handler(req: any, res: any) {
   const reqId = `adm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;

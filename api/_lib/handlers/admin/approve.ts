@@ -1,5 +1,5 @@
-import { initDb } from '../_lib/db.js';
-import { verifyAdminAuth } from '../_lib/auth.js';
+import { initDb } from '../../db.js';
+import { verifyAdminAuth } from '../../auth.js';
 
 export default async function handler(req: any, res: any) {
   const reqId = `app-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;

@@ -1,4 +1,4 @@
-import { initDb } from '../_lib/db.js';
+import { initDb } from '../../db.js';
 
 export default async function handler(req: any, res: any) {
   const reqId = `cust-sync-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;

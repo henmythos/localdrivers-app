@@ -5,8 +5,16 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/.well-known/assetlinks.json",
-      "destination": "/api/assetlinks"
+      "source": "/api/admin/:action*",
+      "destination": "/api/admin?action=:action*"
+    },
+    {
+      "source": "/api/drivers/:action+",
+      "destination": "/api/drivers?action=:action+"
+    },
+    {
+      "source": "/api/customers/:action+",
+      "destination": "/api/customers?action=:action+"
     },
     {
       "source": "/((?!api/|\\.well-known/).*)",

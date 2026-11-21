@@ -1,5 +1,5 @@
-import { initDb } from '../_lib/db.js';
-import { verifyPassword, hashPassword, generateToken, cleanEnvValue } from '../_lib/auth.js';
+import { initDb } from '../../db.js';
+import { verifyPassword, hashPassword, generateToken, cleanEnvValue } from '../../auth.js';
 
 export default async function handler(req: any, res: any) {
   const reqId = `lgn-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;

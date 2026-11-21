@@ -42,7 +42,15 @@ async function loadModule(filePath) {
 }
 
 async function loadHandler(filePath) {
-  const mod = await loadModule(filePath);
+  let mappedPath = filePath;
+  if (filePath.startsWith('api/admin/')) {
+    mappedPath = filePath.replace('api/admin/', 'api/_lib/handlers/admin/');
+  } else if (filePath.startsWith('api/drivers/')) {
+    mappedPath = filePath.replace('api/drivers/', 'api/_lib/handlers/drivers/');
+  } else if (filePath.startsWith('api/customers/')) {
+    mappedPath = filePath.replace('api/customers/', 'api/_lib/handlers/customers/');
+  }
+  const mod = await loadModule(mappedPath);
   return mod.default || mod;
 }
 
@@ -1688,18 +1696,7 @@ async function main() {
     console.log(`[PASS] 55. Admin Customers Analytics: Retrieved unified customer records with live booking frequency.`);
     passed++;
 
-    // 56. Digital Asset Links Verification (/api/assetlinks & public/.well-known/assetlinks.json)
-    const assetlinksHandler = await loadHandler('api/assetlinks.ts');
-    const assetlinksRes = createMockRes();
-    await assetlinksHandler({ method: 'GET', headers: {} }, assetlinksRes);
-    if (assetlinksRes.statusCode !== 200 || !Array.isArray(assetlinksRes.body)) {
-      throw new Error(`Assetlinks handler failed: HTTP ${assetlinksRes.statusCode}`);
-    }
-    const statement = assetlinksRes.body[0];
-    if (statement?.target?.package_name !== 'in.localdrivers.app' || !statement?.target?.sha256_cert_fingerprints?.includes('12:7D:2C:59:60:67:C8:8B:34:BB:DB:D3:30:32:5E:33:4A:90:36:EC:9D:52:FE:F8:BB:55:D0:82:6F:85:DB:32')) {
-      throw new Error(`Assetlinks content invalid: ${JSON.stringify(statement)}`);
-    }
-
+    // 56. Digital Asset Links Verification (public/.well-known/assetlinks.json)
     const staticAssetPath = path.resolve('public/.well-known/assetlinks.json');
     if (!fs.existsSync(staticAssetPath)) {
       throw new Error(`Missing static assetlinks.json at ${staticAssetPath}`);
@@ -1708,8 +1705,44 @@ async function main() {
     if (!Array.isArray(staticContent) || staticContent[0]?.target?.package_name !== 'in.localdrivers.app') {
       throw new Error(`Static assetlinks.json content invalid`);
     }
+    if (!staticContent[0]?.target?.sha256_cert_fingerprints?.includes('12:7D:2C:59:60:67:C8:8B:34:BB:DB:D3:30:32:5E:33:4A:90:36:EC:9D:52:FE:F8:BB:55:D0:82:6F:85:DB:32')) {
+      throw new Error(`Assetlinks missing Google Play certificate fingerprint`);
+    }
 
-    console.log(`[PASS] 56. Digital Asset Links: Verified /.well-known/assetlinks.json and API endpoint for in.localdrivers.app.`);
+    console.log(`[PASS] 56. Digital Asset Links: Verified static /.well-known/assetlinks.json for in.localdrivers.app.`);
+    passed++;
+
+    // 57. Vercel Serverless Function Limits & Unified Routing Verification
+    const apiFiles = fs.readdirSync('api').filter(f => f.endsWith('.ts') || f.endsWith('.js'));
+    if (apiFiles.length > 12) {
+      throw new Error(`Exceeded Vercel Hobby limit of 12 serverless functions: found ${apiFiles.length} (${apiFiles.join(', ')})`);
+    }
+
+    // Verify Unified Router: api/admin.ts routes /api/admin/login
+    const adminUnified = await loadHandler('api/admin.ts');
+    const adminTestRes = createMockRes();
+    await adminUnified({ method: 'POST', url: '/api/admin/login', query: { action: 'login' }, body: {} }, adminTestRes);
+    if (adminTestRes.statusCode !== 400 && adminTestRes.statusCode !== 401) {
+      throw new Error(`Unified admin router failed on login: HTTP ${adminTestRes.statusCode}`);
+    }
+
+    // Verify Unified Router: api/drivers.ts routes /api/drivers list
+    const driversUnified = await loadHandler('api/drivers.ts');
+    const driversTestRes = createMockRes();
+    await driversUnified({ method: 'GET', url: '/api/drivers', query: {} }, driversTestRes);
+    if (driversTestRes.statusCode !== 200 || typeof driversTestRes.body?.count !== 'number') {
+      throw new Error(`Unified drivers router failed: HTTP ${driversTestRes.statusCode}`);
+    }
+
+    // Verify Unified Router: api/customers.ts routes /api/customers/profile
+    const customersUnified = await loadHandler('api/customers.ts');
+    const custTestRes = createMockRes();
+    await customersUnified({ method: 'GET', url: '/api/customers/profile', query: { action: 'profile' } }, custTestRes);
+    if (custTestRes.statusCode !== 400 && custTestRes.statusCode !== 404) {
+      throw new Error(`Unified customers router failed: HTTP ${custTestRes.statusCode}`);
+    }
+
+    console.log(`[PASS] 57. Vercel Function Optimization: Verified ${apiFiles.length}/12 functions (Hobby plan compliant) and tested unified routers.`);
     passed++;
 
     // Clean up test records
