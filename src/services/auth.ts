@@ -126,8 +126,8 @@ export const authService = {
     return { success: false, error: 'Login failed. Please retry.' };
   },
 
-  // Driver Login / Status Check via Clerk Google Sign-In
-  async loginDriverWithClerk(clerkToken: string): Promise<{
+  // Driver Login / Status Check via Firebase Google Sign-In
+  async loginDriverWithFirebase(token: string): Promise<{
     success: boolean;
     driver?: Driver;
     error?: string;
@@ -137,7 +137,7 @@ export const authService = {
     phone?: string;
     rejectionReason?: string;
   }> {
-    if (!clerkToken) {
+    if (!token) {
       return { success: false, error: 'Google sign-in token is required.' };
     }
 
@@ -153,7 +153,7 @@ export const authService = {
       rejectionReason?: string;
     }>(
       '/api/drivers/login',
-      { clerkToken },
+      { idToken: token, firebaseToken: token, clerkToken: token },
       { fallbackErrorMessage: 'Driver authentication service temporarily unavailable. Please retry.' }
     );
 
@@ -197,8 +197,18 @@ export const authService = {
 
     return {
       success: false,
+      status: apiStatus as any,
+      driverCode: res.data?.driverCode,
+      driverName: res.data?.driverName,
+      phone: res.data?.phone,
+      rejectionReason: res.data?.rejectionReason,
       error: apiError || 'Google driver authentication failed. Please retry.',
     };
+  },
+
+  // Backwards compatible alias
+  async loginDriverWithClerk(token: string) {
+    return this.loginDriverWithFirebase(token);
   },
 
   // Logout Driver
@@ -246,15 +256,15 @@ export const authService = {
     };
   },
 
-  // Authenticate Admin via Clerk Google Sign-In (localdrivers.in@gmail.com)
-  async loginAdminWithClerk(clerkToken: string): Promise<{ success: boolean; error?: string }> {
-    if (!clerkToken) {
-      return { success: false, error: 'Clerk authentication token is required' };
+  // Authenticate Admin via Firebase Google Sign-In (localdrivers.in@gmail.com)
+  async loginAdminWithFirebase(token: string): Promise<{ success: boolean; error?: string }> {
+    if (!token) {
+      return { success: false, error: 'Authentication token is required' };
     }
 
     const res = await apiClient.post<{ success: boolean; token?: string; error?: string }>(
       '/api/admin/login',
-      { clerkToken },
+      { idToken: token, firebaseToken: token, clerkToken: token },
       { fallbackErrorMessage: 'Administrator authentication service temporarily unavailable.' }
     );
 
@@ -268,8 +278,13 @@ export const authService = {
 
     return {
       success: false,
-      error: res.data?.error || res.error || 'Clerk administrator verification failed.',
+      error: res.data?.error || res.error || 'Administrator verification failed.',
     };
+  },
+
+  // Backwards compatible alias
+  async loginAdminWithClerk(token: string) {
+    return this.loginAdminWithFirebase(token);
   },
 
   // Logout Admin

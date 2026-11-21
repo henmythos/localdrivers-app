@@ -14,7 +14,7 @@ import { routingService, RouteResult } from '../services/routing';
 import { DriverCard } from '../components/driver/DriverCard';
 import { BookingModal } from '../components/booking/BookingModal';
 import { LocationSearchInput } from '../components/booking/LocationSearchInput';
-import { useUser } from '@clerk/react';
+import { useAuth } from '../context/AuthContext';
 import { GoogleAuthButton } from '../components/common/GoogleAuthButton';
 
 interface CustomerHomeProps {
@@ -24,7 +24,7 @@ interface CustomerHomeProps {
 
 export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequestLocation }) => {
   const navigate = useNavigate();
-  const { user, isSignedIn } = useUser();
+  const { user, isSignedIn } = useAuth();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [selectedDriverForBooking, setSelectedDriverForBooking] = useState<Driver | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);

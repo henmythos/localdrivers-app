@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Car, Lock, Phone, ArrowRight, ShieldCheck, UserPlus, Loader2, MessageSquare, CheckCircle2, AlertTriangle, LogOut, Clock } from 'lucide-react';
-import { useUser, useAuth, useClerk, Show } from '@clerk/react';
+import { useAuth } from '../../context/AuthContext';
 import { GoogleAuthButton } from '../../components/common/GoogleAuthButton';
 import { authService } from '../../services/auth';
 
 export const DriverLoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, isLoaded: isClerkLoaded, isSignedIn } = useUser();
-  const { getToken } = useAuth();
-  const { signOut } = useClerk();
+  const { user, isLoaded: isAuthLoaded, isSignedIn, getToken, signOut } = useAuth();
 
   const googleEmail = user?.primaryEmailAddress?.emailAddress?.trim().toLowerCase() || '';
 
@@ -28,7 +26,7 @@ export const DriverLoginPage: React.FC = () => {
 
   // Automatically authenticate or check onboarding status when signed in with Google
   useEffect(() => {
-    if (!isClerkLoaded) return;
+    if (!isAuthLoaded) return;
 
     if (!isSignedIn || !user) {
       setIsCheckingGoogle(false);
@@ -44,7 +42,7 @@ export const DriverLoginPage: React.FC = () => {
         const token = await getToken();
         if (!token || !isMounted) return;
 
-        const res = await authService.loginDriverWithClerk(token);
+        const res = await authService.loginDriverWithFirebase(token);
         if (!isMounted) return;
 
         if (res.success && res.driver) {
@@ -88,7 +86,7 @@ export const DriverLoginPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [isClerkLoaded, isSignedIn, user, getToken, navigate]);
+  }, [isAuthLoaded, isSignedIn, user, getToken, navigate]);
 
   const handleLegacyLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -271,8 +269,8 @@ export const DriverLoginPage: React.FC = () => {
           </div>
         )}
 
-        {/* Primary Clerk Google Sign-In CTA */}
-        <Show when="signed-out">
+        {/* Primary Google Sign-In CTA */}
+        {!isSignedIn && (
           <div className="space-y-3">
             <GoogleAuthButton
               label="Sign in with Google"
@@ -288,7 +286,7 @@ export const DriverLoginPage: React.FC = () => {
               </span>
             </div>
           </div>
-        </Show>
+        )}
 
         {/* Register CTA */}
         <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center space-y-2">

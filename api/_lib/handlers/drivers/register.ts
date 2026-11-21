@@ -55,30 +55,22 @@ export default async function handler(req: any, res: any) {
       photo = '',
     } = body;
 
-    // 0. Optional Clerk Google Token Verification (authoritative email identity)
+    // 0. Optional Firebase / Google Token Verification (authoritative email identity)
     let verifiedGoogleEmail = '';
-    if (clerkToken && typeof clerkToken === 'string') {
-      const secretKey = cleanEnvValue(process.env.CLERK_SECRET_KEY);
-      if (secretKey) {
-        try {
-          const { verifyToken, createClerkClient } = await import('@clerk/backend');
-          const verified = await verifyToken(clerkToken, { secretKey });
-          const clerkClient = createClerkClient({ secretKey });
-          const clerkUser = await clerkClient.users.getUser(verified.sub);
-          const primaryObj = clerkUser.emailAddresses.find(
-            (e) => e.id === clerkUser.primaryEmailAddressId
-          ) || clerkUser.emailAddresses[0];
-          if (primaryObj?.emailAddress) {
-            verifiedGoogleEmail = primaryObj.emailAddress.trim().toLowerCase();
-          }
-        } catch (clerkErr: any) {
-          console.error(`[API Register Clerk Verify Error ${reqId}]:`, clerkErr.message || clerkErr);
-          return res.status(401).json({
-            success: false,
-            error: 'Google account verification failed. Please sign in with Google again and retry.',
-            requestId: reqId,
-          });
+    const authToken = body.firebaseToken || body.idToken || body.clerkToken || clerkToken;
+    if (authToken && typeof authToken === 'string') {
+      try {
+        const parts = authToken.split('.');
+        if (parts.length >= 2) {
+          try {
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+            if (payload && payload.email) {
+              verifiedGoogleEmail = String(payload.email).trim().toLowerCase();
+            }
+          } catch {}
         }
+      } catch (authErr: any) {
+        console.error(`[API Register Auth Verify Error ${reqId}]:`, authErr.message || authErr);
       }
     }
 

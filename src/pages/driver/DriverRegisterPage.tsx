@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { User, Phone, MapPin, Briefcase, Globe, Car, ShieldCheck, CheckCircle2, ArrowRight, Camera, FileText, Lock, UploadCloud, Loader2, MessageSquare, Mail, AlertTriangle, LogOut, Clock } from 'lucide-react';
-import { useUser, useAuth, useClerk } from '@clerk/react';
+import { useAuth } from '../../context/AuthContext';
 import { GoogleAuthButton } from '../../components/common/GoogleAuthButton';
 import { driversService } from '../../services/drivers';
 import { authService } from '../../services/auth';
@@ -23,9 +23,7 @@ const LANGUAGES = ['Telugu', 'Hindi', 'English', 'Urdu', 'Tamil', 'Kannada'];
 
 export const DriverRegisterPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, isLoaded: isClerkLoaded, isSignedIn } = useUser();
-  const { getToken } = useAuth();
-  const { signOut } = useClerk();
+  const { user, isLoaded: isAuthLoaded, isSignedIn, getToken, signOut } = useAuth();
 
   const googleEmail = user?.primaryEmailAddress?.emailAddress?.trim().toLowerCase() || '';
   const googleName = user?.fullName?.trim() || '';
@@ -76,7 +74,7 @@ export const DriverRegisterPage: React.FC = () => {
 
   // Sync Google account details & check if driver already submitted onboarding
   useEffect(() => {
-    if (!isClerkLoaded) return;
+    if (!isAuthLoaded) return;
 
     if (!isSignedIn || !user) {
       setExistingDriverStatus(null);
@@ -97,7 +95,7 @@ export const DriverRegisterPage: React.FC = () => {
       try {
         const token = await getToken();
         if (!token || !isMounted) return;
-        const res = await authService.loginDriverWithClerk(token);
+        const res = await authService.loginDriverWithFirebase(token);
         if (!isMounted) return;
 
         if (res.success && res.driver) {
@@ -134,7 +132,7 @@ export const DriverRegisterPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [isClerkLoaded, isSignedIn, user, googleEmail, googleName, getToken]);
+  }, [isAuthLoaded, isSignedIn, user, googleEmail, googleName, getToken]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, setUrl: (val: string) => void) => {
     const file = e.target.files?.[0];
@@ -314,7 +312,7 @@ export const DriverRegisterPage: React.FC = () => {
   );
 
   // State 0: Checking Google auth or existing driver status
-  if (!isClerkLoaded || isCheckingStatus) {
+  if (!isAuthLoaded || isCheckingStatus) {
     return (
       <div className="min-h-[85vh] flex items-center justify-center px-4 py-12">
         <div className="bg-white rounded-3xl p-8 max-w-md w-full border border-slate-200 shadow-2xl text-center space-y-4">

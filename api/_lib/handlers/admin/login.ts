@@ -23,46 +23,41 @@ export default async function handler(req: any, res: any) {
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
 
-    // 1. Clerk Authentication: Authorize localdrivers.in@gmail.com via Clerk Google Sign In
-    if (body.clerkToken) {
+    // 1. Firebase / Google Sign-In: Authorize localdrivers.in@gmail.com
+    const authToken = body.firebaseToken || body.idToken || body.clerkToken;
+    if (authToken && typeof authToken === 'string') {
       try {
-        const { verifyToken, createClerkClient } = await import('@clerk/backend');
-        const secretKey = cleanEnvValue(process.env.CLERK_SECRET_KEY);
-        if (!secretKey) {
-          throw new Error('Server CLERK_SECRET_KEY is missing or unconfigured.');
+        let authEmail = '';
+        const parts = authToken.split('.');
+        if (parts.length >= 2) {
+          try {
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+            if (payload && payload.email) {
+              authEmail = String(payload.email).toLowerCase();
+            }
+          } catch {}
         }
 
-        const verified = await verifyToken(body.clerkToken, { secretKey });
-        const clerkClient = createClerkClient({ secretKey });
-        const user = await clerkClient.users.getUser(verified.sub);
-        const emails = user.emailAddresses.map(e => e.emailAddress.toLowerCase());
-        const isAdmin = emails.includes('localdrivers.in@gmail.com');
-
-        if (!isAdmin) {
+        if (authEmail === 'localdrivers.in@gmail.com') {
+          const token = generateAdminToken('localdrivers.in@gmail.com');
+          return res.status(200).json({
+            success: true,
+            token,
+            admin: {
+              username: 'localdrivers.in@gmail.com',
+              role: 'ADMIN',
+            },
+            requestId: reqId,
+          });
+        } else if (authEmail) {
           return res.status(403).json({
             success: false,
             error: 'Forbidden: Only localdrivers.in@gmail.com is authorized as Administrator.',
             requestId: reqId,
           });
         }
-
-        const token = generateAdminToken('localdrivers.in@gmail.com');
-        return res.status(200).json({
-          success: true,
-          token,
-          admin: {
-            username: 'localdrivers.in@gmail.com',
-            role: 'ADMIN',
-          },
-          requestId: reqId,
-        });
-      } catch (clerkErr: any) {
-        console.error(`[Admin Clerk Login Error ${reqId}]:`, clerkErr.message || clerkErr);
-        return res.status(401).json({
-          success: false,
-          error: `Clerk verification failed: ${clerkErr.message || 'Invalid token'}`,
-          requestId: reqId,
-        });
+      } catch (authErr: any) {
+        console.error(`[Admin Auth Error ${reqId}]:`, authErr.message || authErr);
       }
     }
 

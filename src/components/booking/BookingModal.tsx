@@ -16,7 +16,7 @@ import { billingService } from '../../services/billing';
 import { locationService } from '../../services/location';
 import { LocationSearchInput } from './LocationSearchInput';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
-import { useUser } from '@clerk/react';
+import { useAuth } from '../../context/AuthContext';
 import { GoogleAuthButton } from '../common/GoogleAuthButton';
 
 interface BookingModalProps {
@@ -54,7 +54,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 }) => {
   const navigate = useNavigate();
   useBodyScrollLock(true, onClose);
-  const { user, isSignedIn } = useUser();
+  const { user, isSignedIn } = useAuth();
   const [step, setStep] = useState<number>(1);
 
   // Determine initial service based strictly on Blueprint (City Driver vs Outstation Driver)

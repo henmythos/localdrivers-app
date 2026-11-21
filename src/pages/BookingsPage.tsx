@@ -7,11 +7,11 @@ import {
 import { Booking, BookingStatus } from '../types';
 import { bookingsService } from '../services/bookings';
 import { dbService } from '../services/database';
-import { useUser } from '@clerk/react';
+import { useAuth } from '../context/AuthContext';
 import { GoogleAuthButton } from '../components/common/GoogleAuthButton';
 
 export const BookingsPage: React.FC = () => {
-  const { user, isSignedIn } = useUser();
+  const { user, isSignedIn } = useAuth();
   const [customerPhone, setCustomerPhone] = useState<string>(
     localStorage.getItem('localdrivers_verified_customer_phone') || ''
   );

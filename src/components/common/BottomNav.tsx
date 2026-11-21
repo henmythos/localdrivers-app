@@ -2,15 +2,15 @@ import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate, Link } from 'react-router-dom';
 import { Home, Calendar, Search, User, CheckSquare, X, Car, Shield, Phone, HelpCircle, ChevronRight, Receipt, LogIn } from 'lucide-react';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
-import { useUser, UserButton } from '@clerk/react';
+import { useAuth } from '../../context/AuthContext';
 import { GoogleAuthButton } from './GoogleAuthButton';
 
 export const BottomNav: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const path = location.pathname;
-  const { user, isSignedIn } = useUser();
-  const isClerkAdmin = user?.primaryEmailAddress?.emailAddress?.toLowerCase() === 'localdrivers.in@gmail.com';
+  const { user, isSignedIn, signOut } = useAuth();
+  const isFirebaseAdmin = user?.email?.toLowerCase() === 'localdrivers.in@gmail.com';
 
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
   useBodyScrollLock(accountSheetOpen, () => setAccountSheetOpen(false));
@@ -220,7 +220,17 @@ export const BottomNav: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2">
-                {isSignedIn && <UserButton />}
+                {isSignedIn && (
+                  <button
+                    onClick={() => {
+                      signOut();
+                      setAccountSheetOpen(false);
+                    }}
+                    className="px-2.5 py-1 text-[11px] font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Sign Out
+                  </button>
+                )}
                 <button
                   onClick={() => setAccountSheetOpen(false)}
                   className="p-2 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
@@ -260,7 +270,7 @@ export const BottomNav: React.FC = () => {
                 </Link>
               )}
 
-              {isClerkAdmin && (
+              {isFirebaseAdmin && (
                 <Link
                   to="/admin/dashboard"
                   onClick={() => setAccountSheetOpen(false)}

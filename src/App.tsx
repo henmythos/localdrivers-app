@@ -40,24 +40,23 @@ import { ContactPage } from './pages/legal/ContactPage';
 import { AboutPage } from './pages/legal/AboutPage';
 import { CancellationPolicyPage } from './pages/legal/CancellationPolicyPage';
 import { DataDeletionPage } from './pages/legal/DataDeletionPage';
-import { useUser, useAuth, AuthenticateWithRedirectCallback } from '@clerk/react';
+import { useAuth } from './context/AuthContext';
 import { authService } from './services/auth';
 import { customerService } from './services/customer';
 import { nativeAuth } from './services/nativeAuth';
 
-const ClerkAdminSync: React.FC = () => {
-  const { user, isLoaded, isSignedIn } = useUser();
-  const { getToken } = useAuth();
+const FirebaseAdminSync: React.FC = () => {
+  const { user, isLoaded, isSignedIn, getToken } = useAuth();
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !user) return;
-    const email = user.primaryEmailAddress?.emailAddress?.toLowerCase();
+    const email = user.email?.toLowerCase();
     if (!email) return;
 
     if (email === 'localdrivers.in@gmail.com') {
       getToken().then(token => {
         if (token) {
-          authService.loginAdminWithClerk(token).catch(() => {});
+          authService.loginAdminWithFirebase(token).catch(() => {});
         }
       });
     }
@@ -67,9 +66,9 @@ const ClerkAdminSync: React.FC = () => {
     customerService.syncCustomerProfileAsync({
       email,
       name: user.fullName || user.firstName || 'Customer',
-      phone: storedPhone || user.primaryPhoneNumber?.phoneNumber || '',
+      phone: storedPhone || user.phoneNumber || '',
       avatarUrl: user.imageUrl || '',
-      clerkId: user.id,
+      clerkId: user.uid,
     }).catch(() => {});
   }, [isLoaded, isSignedIn, user, getToken]);
 
@@ -96,7 +95,7 @@ export const App: React.FC = () => {
 
   return (
     <BrowserRouter>
-      <ClerkAdminSync />
+      <FirebaseAdminSync />
       <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans">
         
         {/* Header */}
@@ -164,7 +163,7 @@ export const App: React.FC = () => {
             <Route path="/admin/settings" element={<AdminSettingsPage />} />
 
             {/* Authentication Callbacks */}
-            <Route path="/sso-callback" element={<AuthenticateWithRedirectCallback />} />
+            <Route path="/sso-callback" element={<Navigate to="/" replace />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />

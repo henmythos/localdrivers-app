@@ -4,12 +4,12 @@ import {
   ShieldCheck, Car, Clock, Receipt, CheckCircle2, 
   ArrowLeft, Users, Star, PhoneCall 
 } from 'lucide-react';
-import { useUser } from '@clerk/react';
+import { useAuth } from '../../context/AuthContext';
 import { GoogleAuthButton } from '../../components/common/GoogleAuthButton';
 
 export const CustomerLoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { isSignedIn, isLoaded } = useUser();
+  const { isSignedIn, isLoaded } = useAuth();
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {

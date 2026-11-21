@@ -4,7 +4,7 @@ import { Bell, Menu, X, Shield, User, MapPin, ChevronDown, HelpCircle, Briefcase
 import { UserLocation } from '../../types';
 import { ReportDriverModal } from './ReportDriverModal';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
-import { Show, SignInButton, UserButton, useUser } from '@clerk/react';
+import { useAuth } from '../../context/AuthContext';
 
 interface HeaderProps {
   userLocation: UserLocation;
@@ -21,8 +21,8 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
 
   const isDriver = path.startsWith('/driver');
   const isAdmin = path.startsWith('/admin');
-  const { user } = useUser();
-  const isClerkAdmin = user?.primaryEmailAddress?.emailAddress?.toLowerCase() === 'localdrivers.in@gmail.com';
+  const { user, isSignedIn } = useAuth();
+  const isFirebaseAdmin = user?.email?.toLowerCase() === 'localdrivers.in@gmail.com';
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
@@ -134,8 +134,8 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
             </div>
           )}
 
-          {/* Clerk Auth Controls */}
-          <Show when="signed-in">
+          {/* Firebase Auth Controls */}
+          {isSignedIn && user ? (
             <div className="flex items-center gap-2">
               <Link
                 to="/customer/profile"
@@ -145,7 +145,7 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
                 <User className="w-3.5 h-3.5 text-brand-600" />
                 <span>My Profile</span>
               </Link>
-              {isClerkAdmin && !isAdmin && (
+              {isFirebaseAdmin && !isAdmin && (
                 <Link
                   to="/admin/dashboard"
                   className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl border border-purple-200 transition-colors"
@@ -154,10 +154,19 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
                   <span>Admin</span>
                 </Link>
               )}
-              <UserButton />
+              <Link
+                to="/customer/profile"
+                className="w-8 h-8 rounded-full overflow-hidden border border-slate-200 flex items-center justify-center bg-brand-100 text-brand-800 text-xs font-bold"
+                title={user.fullName || 'User Profile'}
+              >
+                {user.imageUrl ? (
+                  <img src={user.imageUrl} alt={user.fullName || 'User'} className="w-full h-full object-cover" />
+                ) : (
+                  <span>{(user.firstName || 'U')[0].toUpperCase()}</span>
+                )}
+              </Link>
             </div>
-          </Show>
-          <Show when="signed-out">
+          ) : (
             <Link
               to="/customer/login"
               className="flex items-center gap-1.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 px-3.5 py-1.5 rounded-xl transition-colors border border-slate-200"
@@ -165,7 +174,7 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
               <User className="w-3.5 h-3.5 text-slate-700" />
               <span>Sign In</span>
             </Link>
-          </Show>
+          )}
 
           {/* Notification Bell */}
           <button
@@ -267,48 +276,54 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
               <span>Drive with Us (Partner Register)</span>
             </Link>
 
-            {/* Mobile Clerk Sign In / User Profile */}
+            {/* Mobile Firebase Sign In / User Profile */}
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-              <Show when="signed-in">
-                <div className="flex items-center gap-2.5">
-                  <UserButton />
-                  <div className="text-left">
-                    <span className="text-[10px] text-slate-400 block font-bold">SIGNED IN AS</span>
-                    <span className="text-xs font-bold text-slate-800 truncate block max-w-[190px]">
-                      {user?.primaryEmailAddress?.emailAddress}
-                    </span>
+              {isSignedIn && user ? (
+                <>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-200 flex items-center justify-center bg-brand-100 text-brand-800 text-xs font-bold">
+                      {user.imageUrl ? (
+                        <img src={user.imageUrl} alt={user.fullName || 'User'} className="w-full h-full object-cover" />
+                      ) : (
+                        <span>{(user.firstName || 'U')[0].toUpperCase()}</span>
+                      )}
+                    </div>
+                    <div className="text-left">
+                      <span className="text-[10px] text-slate-400 block font-bold">SIGNED IN AS</span>
+                      <span className="text-xs font-bold text-slate-800 truncate block max-w-[190px]">
+                        {user.email}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Link
-                    to="/customer/profile"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="text-[11px] font-extrabold text-brand-700 bg-brand-50 hover:bg-brand-100 px-2.5 py-1.5 rounded-lg border border-brand-200"
-                  >
-                    Profile
-                  </Link>
-                  {isClerkAdmin && (
+                  <div className="flex items-center gap-1.5">
                     <Link
-                      to="/admin/dashboard"
+                      to="/customer/profile"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="text-[11px] font-extrabold text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded-lg border border-purple-200"
+                      className="text-[11px] font-extrabold text-brand-700 bg-brand-50 hover:bg-brand-100 px-2.5 py-1.5 rounded-lg border border-brand-200"
                     >
-                      Admin
+                      Profile
                     </Link>
-                  )}
-                </div>
-              </Show>
-              <Show when="signed-out">
-                <SignInButton mode="modal">
-                  <button
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="w-full py-2.5 bg-slate-900 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2"
-                  >
-                    <User className="w-3.5 h-3.5" />
-                    <span>Sign in with Google</span>
-                  </button>
-                </SignInButton>
-              </Show>
+                    {isFirebaseAdmin && (
+                      <Link
+                        to="/admin/dashboard"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="text-[11px] font-extrabold text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded-lg border border-purple-200"
+                      >
+                        Admin
+                      </Link>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <Link
+                  to="/customer/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full py-2.5 bg-slate-900 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>Sign In</span>
+                </Link>
+              )}
             </div>
 
             <div className="flex items-center justify-between px-1 text-[11px] text-slate-400 pt-1">
