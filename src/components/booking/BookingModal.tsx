@@ -16,7 +16,8 @@ import { billingService } from '../../services/billing';
 import { locationService } from '../../services/location';
 import { LocationSearchInput } from './LocationSearchInput';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
-import { useUser, SignInButton } from '@clerk/react';
+import { useUser } from '@clerk/react';
+import { GoogleAuthButton } from '../common/GoogleAuthButton';
 
 interface BookingModalProps {
   driver: Driver;
@@ -594,20 +595,20 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                     </span>
                   </div>
                 ) : (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-2.5">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-amber-900">Sign in with Google (Recommended)</p>
-                      <p className="text-[10px] text-amber-700">Link this ride to your Google profile for tax invoices & live tracking.</p>
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-amber-900">Sign in with Google (Recommended)</p>
+                        <p className="text-[10px] text-amber-700">Link this ride to your Google profile for tax invoices & live tracking.</p>
+                      </div>
+                      <div className="shrink-0">
+                        <GoogleAuthButton
+                          label="Sign In with Google"
+                          redirectUrl={window.location.pathname}
+                          mode="auto"
+                          className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shrink-0 flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                        />
+                      </div>
                     </div>
-                    <SignInButton mode="modal">
-                      <button
-                        type="button"
-                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shrink-0 flex items-center gap-1.5 shadow-xs transition-colors"
-                      >
-                        <span>Sign In</span>
-                      </button>
-                    </SignInButton>
-                  </div>
                 )}
               </div>
 

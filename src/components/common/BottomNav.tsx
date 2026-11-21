@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate, Link } from 'react-router-dom';
-import { Home, Calendar, Search, User, CheckSquare, X, Car, Shield, Phone, HelpCircle, ChevronRight } from 'lucide-react';
+import { Home, Calendar, Search, User, CheckSquare, X, Car, Shield, Phone, HelpCircle, ChevronRight, Receipt, LogIn } from 'lucide-react';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
+import { useUser, UserButton } from '@clerk/react';
+import { GoogleAuthButton } from './GoogleAuthButton';
 
 export const BottomNav: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const path = location.pathname;
+  const { user, isSignedIn } = useUser();
+  const isClerkAdmin = user?.primaryEmailAddress?.emailAddress?.toLowerCase() === 'localdrivers.in@gmail.com';
 
   const [accountSheetOpen, setAccountSheetOpen] = useState(false);
   useBodyScrollLock(accountSheetOpen, () => setAccountSheetOpen(false));
@@ -193,30 +197,83 @@ export const BottomNav: React.FC = () => {
           >
             {/* Sheet Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700 font-black text-lg">
-                  {savedName ? savedName[0].toUpperCase() : 'U'}
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-base">
-                    {savedName || 'Localdrivers User'}
+              <div className="flex items-center gap-3 min-w-0">
+                {isSignedIn && user?.imageUrl ? (
+                  <img
+                    src={user.imageUrl}
+                    alt={user.fullName || 'User'}
+                    className="w-12 h-12 rounded-full object-cover border border-slate-200 shrink-0"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700 font-black text-lg shrink-0">
+                    {user?.firstName ? user.firstName[0].toUpperCase() : (savedName ? savedName[0].toUpperCase() : 'U')}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <h3 className="font-extrabold text-slate-900 text-base truncate">
+                    {user?.fullName || user?.firstName || savedName || 'Localdrivers User'}
                   </h3>
-                  <span className="text-xs text-slate-500 font-medium font-mono">
-                    {savedPhone || 'Hyderabad Rider'}
+                  <span className="text-xs text-slate-500 font-medium truncate block">
+                    {user?.primaryEmailAddress?.emailAddress || savedPhone || 'Hyderabad Rider'}
                   </span>
                 </div>
               </div>
 
-              <button
-                onClick={() => setAccountSheetOpen(false)}
-                className="p-2 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {isSignedIn && <UserButton />}
+                <button
+                  onClick={() => setAccountSheetOpen(false)}
+                  className="p-2 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
+
+            {/* If Signed Out: Quick Google Sign-In Card */}
+            {!isSignedIn && (
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 space-y-2">
+                <p className="text-xs font-bold text-slate-900">Sign in with Google for Lifetime Records</p>
+                <p className="text-[11px] text-slate-500">Access your ride receipts, saved driver contact phone, and past trips.</p>
+                <GoogleAuthButton
+                  label="Sign In with Google"
+                  redirectUrl="/customer/profile"
+                  mode="auto"
+                  className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                />
+              </div>
+            )}
 
             {/* Account Quick Links */}
             <div className="space-y-1 text-xs font-bold text-slate-800">
+              {isSignedIn && (
+                <Link
+                  to="/customer/profile"
+                  onClick={() => setAccountSheetOpen(false)}
+                  className="w-full p-3.5 rounded-2xl bg-brand-50 hover:bg-brand-100 text-brand-900 border border-brand-100 flex items-center justify-between transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Receipt className="w-4 h-4 text-brand-600" />
+                    <span>Customer Profile & Receipts</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-brand-500" />
+                </Link>
+              )}
+
+              {isClerkAdmin && (
+                <Link
+                  to="/admin/dashboard"
+                  onClick={() => setAccountSheetOpen(false)}
+                  className="w-full p-3.5 rounded-2xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 flex items-center justify-between transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Shield className="w-4 h-4 text-purple-600" />
+                    <span>Administrator Dashboard</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-purple-400" />
+                </Link>
+              )}
+
               <Link
                 to="/bookings"
                 onClick={() => setAccountSheetOpen(false)}
@@ -237,6 +294,18 @@ export const BottomNav: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <Car className="w-4 h-4 text-emerald-600" />
                   <span>All Driver Rental Packages</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </Link>
+
+              <Link
+                to="/driver/login"
+                onClick={() => setAccountSheetOpen(false)}
+                className="w-full p-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <User className="w-4 h-4 text-amber-600" />
+                  <span>Driver Partner Portal</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </Link>

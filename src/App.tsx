@@ -40,7 +40,7 @@ import { ContactPage } from './pages/legal/ContactPage';
 import { AboutPage } from './pages/legal/AboutPage';
 import { CancellationPolicyPage } from './pages/legal/CancellationPolicyPage';
 import { DataDeletionPage } from './pages/legal/DataDeletionPage';
-import { useUser, useAuth } from '@clerk/react';
+import { useUser, useAuth, AuthenticateWithRedirectCallback } from '@clerk/react';
 import { authService } from './services/auth';
 import { customerService } from './services/customer';
 import { nativeAuth } from './services/nativeAuth';
@@ -162,6 +162,9 @@ export const App: React.FC = () => {
             <Route path="/admin/customers" element={<AdminCustomersPage />} />
             <Route path="/admin/services" element={<AdminServicesPage />} />
             <Route path="/admin/settings" element={<AdminSettingsPage />} />
+
+            {/* Authentication Callbacks */}
+            <Route path="/sso-callback" element={<AuthenticateWithRedirectCallback />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />

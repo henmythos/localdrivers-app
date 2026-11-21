@@ -158,12 +158,13 @@ export const Header: React.FC<HeaderProps> = ({ userLocation, onRequestLocation 
             </div>
           </Show>
           <Show when="signed-out">
-            <SignInButton mode="modal">
-              <button className="flex items-center gap-1.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 px-3.5 py-1.5 rounded-xl transition-colors border border-slate-200">
-                <User className="w-3.5 h-3.5 text-slate-700" />
-                <span>Sign In</span>
-              </button>
-            </SignInButton>
+            <Link
+              to="/customer/login"
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 px-3.5 py-1.5 rounded-xl transition-colors border border-slate-200"
+            >
+              <User className="w-3.5 h-3.5 text-slate-700" />
+              <span>Sign In</span>
+            </Link>
           </Show>
 
           {/* Notification Bell */}
