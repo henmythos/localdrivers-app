@@ -1,14 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   MapPin, ChevronDown, ChevronRight, Clock, Calendar, User, Car, 
-  ShieldCheck, Star, Navigation, AlertTriangle, Headphones, Shield, Sparkles, Phone, Briefcase 
+  ShieldCheck, Star, Navigation, Sparkles, Briefcase, Plus, Trash2, 
+  RotateCcw, CheckCircle2, Shield, Phone, ArrowRight, Compass
 } from 'lucide-react';
-import { Driver, UserLocation, ServiceCategory } from '../types';
+import { Driver, UserLocation, ServiceCategory, TripStop } from '../types';
 import { driversService } from '../services/drivers';
 import { dbService } from '../services/database';
+import { gpsService } from '../services/gps';
+import { locationService } from '../services/location';
+import { routingService, RouteResult } from '../services/routing';
 import { DriverCard } from '../components/driver/DriverCard';
 import { BookingModal } from '../components/booking/BookingModal';
+import { LocationSearchInput } from '../components/booking/LocationSearchInput';
 import { useUser } from '@clerk/react';
 import { GoogleAuthButton } from '../components/common/GoogleAuthButton';
 
@@ -21,13 +26,38 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
   const navigate = useNavigate();
   const { user, isSignedIn } = useUser();
   const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [services, setServices] = useState<ServiceCategory[]>([]);
   const [selectedDriverForBooking, setSelectedDriverForBooking] = useState<Driver | null>(null);
-  const [preselectedService, setPreselectedService] = useState<any>(undefined);
-  const [tripIntent, setTripIntent] = useState<'all' | 'city' | 'outstation'>('all');
-  const [activeFilterChip, setActiveFilterChip] = useState<'all' | 'top_rated' | 'nearby' | 'available'>('all');
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // BLUEPRINT CORE: TWO CHOICES ONLY (Now / In City vs For Later / OutStation)
+  const [tripType, setTripType] = useState<'city' | 'outstation'>('city');
+  const [activeFilterChip, setActiveFilterChip] = useState<'all' | 'top_rated' | 'nearby' | 'available'>('all');
+
+  // RIDE PLANNER FORM STATE
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [pickupLocation, setPickupLocation] = useState<string>(() => userLocation?.address || 'Road No. 36, Jubilee Hills, Hyderabad');
+  const [pickupCoords, setPickupCoords] = useState<{ latitude: number; longitude: number }>(() => ({
+    latitude: userLocation?.latitude || 17.4319,
+    longitude: userLocation?.longitude || 78.4073,
+  }));
+  const [dropLocation, setDropLocation] = useState<string>('Inorbit Mall, Madhapur, Hyderabad');
+  const [dropCoords, setDropCoords] = useState<{ latitude: number; longitude: number }>({
+    latitude: 17.4356,
+    longitude: 78.3869,
+  });
+  const [pickupTime, setPickupTime] = useState<string>('Instant ASAP (Within 15 Mins)');
+  const [tripDate, setTripDate] = useState<string>(todayStr);
+  const [outstationDays, setOutstationDays] = useState<number>(1);
+  const [vehicleType, setVehicleType] = useState<string>('Sedan');
+  const [transmission, setTransmission] = useState<'Manual' | 'Automatic'>('Manual');
+  const [vehicleModel, setVehicleModel] = useState<string>('');
+
+  const [isGpsLoading, setIsGpsLoading] = useState<boolean>(false);
+  const [gpsSuccessMessage, setGpsSuccessMessage] = useState<string | null>(null);
+
+  const recommendedSectionRef = useRef<HTMLDivElement>(null);
+
+  // Load Drivers
   const loadData = async () => {
     try {
       const liveDrivers = await driversService.getApprovedDriversAsync();
@@ -62,7 +92,6 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
       setDrivers(sorted);
     } finally {
       setIsLoading(false);
-      setServices(dbService.getServices());
     }
   };
 
@@ -74,36 +103,50 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
     return () => unsubscribe();
   }, [userLocation]);
 
-  const handleHeroBookDriver = () => {
-    const availableDriver = displayedDrivers.find(d => d.isOnline && d.currentWorkStatus !== 'on_trip') ||
-      displayedDrivers.find(d => d.isOnline) ||
-      displayedDrivers[0] ||
-      drivers[0];
+  // Update pickup if userLocation changes initially and wasn't manually edited
+  useEffect(() => {
+    if (userLocation?.address) {
+      setPickupLocation(userLocation.address);
+      if (userLocation.latitude && userLocation.longitude) {
+        setPickupCoords({ latitude: userLocation.latitude, longitude: userLocation.longitude });
+      }
+    }
+  }, [userLocation]);
 
-    if (availableDriver) {
-      setSelectedDriverForBooking(availableDriver);
-    } else {
-      navigate('/find-drivers');
+  // Handle GPS 1-Tap Fetch for Pickup Location
+  const handleUseGps = async () => {
+    setIsGpsLoading(true);
+    setGpsSuccessMessage(null);
+    try {
+      const geo = await gpsService.captureEventLocation('Manual Refresh');
+      if (geo.source === 'gps') {
+        const resolved = await locationService.reverseGeocode(geo.latitude, geo.longitude);
+        const resolvedAddr = resolved?.address || geo.address || `Current Location (${geo.latitude.toFixed(4)}, ${geo.longitude.toFixed(4)})`;
+        setPickupCoords({ latitude: geo.latitude, longitude: geo.longitude });
+        setPickupLocation(resolvedAddr);
+        setGpsSuccessMessage('GPS Location Detected');
+        setTimeout(() => setGpsSuccessMessage(null), 3500);
+      } else {
+        alert(geo.address || 'Unable to access high-accuracy GPS. Please enter your pickup address.');
+      }
+    } finally {
+      setIsGpsLoading(false);
     }
   };
 
-  const handleSelectCategory = (serviceName: string) => {
-    setPreselectedService(serviceName);
-    const matchingDriver = drivers.find(d => d.services.includes(serviceName as any) && d.isOnline && d.currentWorkStatus !== 'on_trip') ||
-      drivers.find(d => d.services.includes(serviceName as any) && d.isOnline) ||
-      drivers.find(d => d.services.includes(serviceName as any)) ||
-      drivers[0];
-
-    if (matchingDriver) {
-      setSelectedDriverForBooking(matchingDriver);
-    } else {
-      navigate(`/find-drivers?service=${encodeURIComponent(serviceName)}`);
+  // Submit Ride Planner -> Scroll to Recommended Drivers
+  const handleSubmitPlanner = () => {
+    if (recommendedSectionRef.current) {
+      recommendedSectionRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
+  // Filter Drivers According to Blueprint Core Rule:
+  // For 'city': Recommend drivers who are ready for daily hourly bookings (City Driver)
+  // For 'outstation': Recommend drivers who are ready for outstation (Outstation Driver)
   const displayedDrivers = drivers.filter(d => {
-    if (tripIntent === 'city' && !d.services.includes('City Driver')) return false;
-    if (tripIntent === 'outstation' && !d.services.includes('Outstation Driver')) return false;
+    if (tripType === 'city' && !d.services.includes('City Driver')) return false;
+    if (tripType === 'outstation' && !d.services.includes('Outstation Driver')) return false;
     if (activeFilterChip === 'top_rated') return d.rating >= 4.8;
     if (activeFilterChip === 'nearby') return d.distanceKm <= 5.0;
     if (activeFilterChip === 'available') return d.isOnline && d.currentWorkStatus !== 'on_trip';
@@ -114,7 +157,7 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
     <div className="min-h-screen bg-slate-100/60 pb-24 md:pb-12">
       
       {/* HERO SECTION WITH CHARMINAR BANNER */}
-      <section className="relative bg-gradient-to-b from-[#e0f2fe] via-[#f0f9ff] to-slate-100 pt-4 pb-6 px-4 sm:px-6 lg:px-8 overflow-hidden">
+      <section className="relative bg-gradient-to-b from-[#e0f2fe] via-[#f0f9ff] to-slate-100 pt-3 pb-5 px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div className="max-w-5xl mx-auto">
           
           {/* Banner Graphic matching Hyderabad theme */}
@@ -122,35 +165,30 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
             <img
               src="/charminar-banner.png"
               alt="Hyderabad Drivers at Your Service"
-              className="w-full h-44 sm:h-56 md:h-64 object-cover object-right"
+              className="w-full h-40 sm:h-52 md:h-60 object-cover object-right"
             />
 
-            {/* Floating Banner Overlay for small screens */}
-            <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/80 to-transparent p-5 sm:p-8 flex flex-col justify-center max-w-lg">
+            {/* Banner Content Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/85 to-transparent p-5 sm:p-7 flex flex-col justify-center max-w-lg">
+              <span className="text-[10px] font-black uppercase tracking-wider text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded-full self-start mb-1 border border-brand-200">
+                Local Drivers Platform
+              </span>
               <h1 className="text-2xl sm:text-4xl font-black text-navy-900 leading-tight">
                 Hyderabad
               </h1>
-              <p className="text-lg sm:text-2xl font-bold text-navy-900 mt-0.5">
-                Drivers at Your Service
+              <p className="text-base sm:text-2xl font-bold text-navy-900 mt-0.5">
+                Verified Drivers for Your Car
               </p>
 
-              <div className="mt-3 sm:mt-4 flex flex-wrap items-center gap-2.5">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-400 text-navy-900 font-extrabold text-xs shadow-sm self-start">
-                  <Clock className="w-4 h-4 fill-current stroke-none" />
-                  <span>24 Hours Available</span>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-400 text-navy-900 font-extrabold text-xs shadow-xs">
+                  <Clock className="w-3.5 h-3.5 fill-current stroke-none" />
+                  <span>24/7 Rapid Dispatch</span>
                 </div>
-
-                {/* Primary HERO Book Driver CTA Button */}
-                <button
-                  id="home-hero-book-driver-btn"
-                  onClick={handleHeroBookDriver}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
-                  title="Book a Verified Driver Now"
-                >
-                  <Car className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Book Driver</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 font-extrabold text-xs border border-emerald-300">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>100% Aadhaar & DL Verified</span>
+                </div>
               </div>
             </div>
           </div>
@@ -158,17 +196,72 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
         </div>
       </section>
 
-      {/* MAIN CONTENT CONTAINER */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 -mt-2">
-        
+      {/* MAIN CONTAINER */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-5 -mt-2">
+
+        {/* TOP QUICK-ACTION NAVIGATION (Blueprint Plan: Become A Driver / Book Driver / Sign In) */}
+        <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                if (recommendedSectionRef.current) {
+                  recommendedSectionRef.current.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            >
+              <Car className="w-4 h-4 text-amber-300" />
+              <span>Book Driver</span>
+            </button>
+            <Link
+              to="/driver/register"
+              className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 font-extrabold text-xs flex items-center gap-1.5 border border-slate-200 shadow-xs shrink-0 transition-colors"
+            >
+              <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Become a Driver</span>
+            </Link>
+            <Link
+              to="/driver/login"
+              className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs flex items-center gap-1.5 border border-slate-200 shadow-xs shrink-0 transition-colors"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+              <span>Driver Login</span>
+            </Link>
+          </div>
+
+          <div className="shrink-0">
+            {isSignedIn && user ? (
+              <Link
+                to="/customer/profile"
+                className="px-3 py-1.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-900 font-bold text-xs flex items-center gap-1.5 hover:bg-sky-100 transition-colors"
+              >
+                {user.imageUrl ? (
+                  <img src={user.imageUrl} alt={user.fullName || 'User'} className="w-5 h-5 rounded-full object-cover" />
+                ) : (
+                  <User className="w-3.5 h-3.5 text-sky-700" />
+                )}
+                <span className="truncate max-w-[100px]">{user.firstName || 'Profile'}</span>
+              </Link>
+            ) : (
+              <Link
+                to="/customer/login"
+                className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs flex items-center gap-1.5 border border-slate-200 shadow-xs transition-colors"
+              >
+                <User className="w-3.5 h-3.5 text-brand-600" />
+                <span>Customer Sign In</span>
+              </Link>
+            )}
+          </div>
+        </div>
+
         {/* CUSTOMER GOOGLE ACCOUNT BANNER */}
         {isSignedIn && user ? (
-          <div className="bg-gradient-to-r from-sky-50 via-white to-blue-50 rounded-2xl p-3.5 sm:p-4 border border-sky-200/80 shadow-xs flex items-center justify-between gap-3">
+          <div className="bg-gradient-to-r from-sky-50 via-white to-blue-50 rounded-2xl p-3.5 border border-sky-200/80 shadow-xs flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               {user.imageUrl ? (
-                <img src={user.imageUrl} alt={user.fullName || 'User'} className="w-10 h-10 rounded-full object-cover border border-sky-200 shrink-0" />
+                <img src={user.imageUrl} alt={user.fullName || 'User'} className="w-9 h-9 rounded-full object-cover border border-sky-200 shrink-0" />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 rounded-full bg-brand-100 flex items-center justify-center shrink-0">
                   <User className="w-5 h-5 text-brand-700" />
                 </div>
               )}
@@ -177,12 +270,12 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
                   <span className="text-xs font-black text-slate-900 truncate">
                     Welcome back, {user.firstName || user.fullName || 'Rider'}!
                   </span>
-                  <span className="hidden sm:inline-block px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-emerald-100 text-emerald-800">
+                  <span className="inline-block px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-emerald-100 text-emerald-800">
                     Google Connected
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 truncate">
-                  Your ride receipts, saved phone, and trip records are active.
+                  Your ride receipts and trip history are active.
                 </p>
               </div>
             </div>
@@ -195,14 +288,14 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
             </Link>
           </div>
         ) : (
-          <div className="bg-gradient-to-r from-amber-50 via-white to-orange-50 rounded-2xl p-3.5 sm:p-4 border border-amber-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="bg-gradient-to-r from-amber-50 via-white to-orange-50 rounded-2xl p-3.5 border border-amber-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
                 <Sparkles className="w-4 h-4 text-amber-700" />
               </div>
               <div>
                 <p className="text-xs font-bold text-slate-900">Sign in with Google for Lifetime Ride History</p>
-                <p className="text-[11px] text-slate-500">Maintain your profile, view trip receipts, and book verified drivers faster.</p>
+                <p className="text-[11px] text-slate-500">Auto-fill your details, view trip receipts, and book verified drivers faster.</p>
               </div>
             </div>
             <div className="shrink-0 max-w-xs w-full sm:w-auto">
@@ -210,368 +303,436 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
                 label="Sign In with Google"
                 redirectUrl="/customer/profile"
                 mode="auto"
-                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-xs transition-colors shrink-0 cursor-pointer w-full"
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-xs transition-colors shrink-0 cursor-pointer w-full"
               />
             </div>
           </div>
         )}
 
-        {/* TOP QUICK-ACTION NAVIGATION PILLS (Blueprint Plan: Become A Driver / Book Driver / Sign In) */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-          <button
-            onClick={handleHeroBookDriver}
-            className="px-3.5 py-2 rounded-xl bg-brand-600 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer"
-          >
-            <Car className="w-3.5 h-3.5 text-amber-300" />
-            <span>Book Driver</span>
-          </button>
-          <Link
-            to="/driver/register"
-            className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 font-extrabold text-xs flex items-center gap-1.5 border border-slate-200 shadow-xs shrink-0 transition-colors"
-          >
-            <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Become a Driver</span>
-          </Link>
-          <Link
-            to="/driver/login"
-            className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs flex items-center gap-1.5 border border-slate-200 shadow-xs shrink-0 transition-colors"
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-            <span>Driver Login</span>
-          </Link>
-          {!isSignedIn && (
-            <Link
-              to="/customer/login"
-              className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs flex items-center gap-1.5 border border-slate-200 shadow-xs shrink-0 transition-colors"
-            >
-              <User className="w-3.5 h-3.5 text-brand-600" />
-              <span>Customer Sign In</span>
-            </Link>
-          )}
-        </div>
-
-        {/* YOUR LOCATION SELECTOR CARD */}
-        <div 
-          onClick={onRequestLocation}
-          className="bg-white rounded-2xl p-4 shadow-soft border border-slate-200/80 flex items-center justify-between cursor-pointer hover:border-brand-400 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
-              <MapPin className="w-6 h-6 text-emerald-600 fill-emerald-100" />
-            </div>
-            <div>
-              <span className="text-xs font-extrabold text-slate-900 block">Your Location</span>
-              <span className="text-xs text-slate-500 font-medium">{userLocation.address}</span>
-            </div>
-          </div>
-
-          <ChevronDown className="w-5 h-5 text-slate-400" />
-        </div>
-
-        {/* BLUEPRINT CORE FLOW: NOW/IN CITY vs FOR LATER/OUTSTATION */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          {/* Option A: Now / In City */}
-          <div
-            onClick={() => handleSelectCategory('City Driver')}
-            className="bg-gradient-to-br from-sky-500 to-brand-700 text-white rounded-3xl p-5 shadow-md hover:shadow-xl transition-all cursor-pointer relative overflow-hidden group active:scale-99"
-          >
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl transform translate-x-8 -translate-y-8" />
-            <div className="relative z-10 flex flex-col justify-between h-full space-y-4">
-              <div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-xs text-[10px] font-black uppercase tracking-wider mb-2">
-                  <Clock className="w-3 h-3 text-yellow-300" />
-                  <span>Instant Match • 10-15 Min</span>
-                </div>
-                <h3 className="text-xl font-black text-white leading-tight">
-                  Now / In City
-                </h3>
-                <p className="text-xs text-sky-100 font-medium mt-1">
-                  Daily hourly travel, shopping, office, or dining in Hyderabad.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-white/15">
-                <div className="text-xs">
-                  <span className="font-extrabold text-amber-300 text-sm">₹200/hr</span>
-                  <span className="text-sky-200 text-[10px] ml-1">(Min 2 hrs)</span>
-                </div>
-                <div className="inline-flex items-center gap-1 px-3 py-1.5 bg-white text-slate-900 rounded-xl text-xs font-black shadow-sm group-hover:bg-amber-300 transition-colors">
-                  <span>Book Now</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Option B: For Later / Outstation */}
-          <div
-            onClick={() => handleSelectCategory('Outstation')}
-            className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-5 shadow-md hover:shadow-xl transition-all cursor-pointer relative overflow-hidden group active:scale-99"
-          >
-            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-400/10 rounded-full blur-2xl transform translate-x-8 -translate-y-8" />
-            <div className="relative z-10 flex flex-col justify-between h-full space-y-4">
-              <div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-xs text-[10px] font-black uppercase tracking-wider mb-2 text-amber-300">
-                  <Calendar className="w-3 h-3" />
-                  <span>Advance Booking</span>
-                </div>
-                <h3 className="text-xl font-black text-white leading-tight">
-                  For Later / Outstation
-                </h3>
-                <p className="text-xs text-slate-300 font-medium mt-1">
-                  Multi-day highway trips, weekend getaways & outstation return.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                <div className="text-xs">
-                  <span className="font-extrabold text-amber-400 text-sm">₹1500/day</span>
-                  <span className="text-slate-400 text-[10px] ml-1">+ Allowance</span>
-                </div>
-                <div className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-400 text-slate-950 rounded-xl text-xs font-black shadow-sm group-hover:bg-amber-300 transition-colors">
-                  <span>Plan Trip</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* "WHAT DO YOU NEED?" SECTION TITLE */}
+        {/* BLUEPRINT CORE: TWO CHOICES ONLY (Now / In City vs For Later / OutStation) */}
         <div>
-          <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight mb-3">
-            What do you need?
-          </h2>
-
-          {/* 4 SERVICE CATEGORY CARDS MATCHING EXACT MOCKUP PALETTE */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
+            Select Your Booking Flow
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             
-            {/* 1. DRIVER NOW (Light Sky Blue) */}
-            <div
-              onClick={() => handleSelectCategory('City Driver')}
-              className="bg-cardBlue-bg border border-cardBlue-border rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all cursor-pointer relative flex flex-col justify-between group"
+            {/* Option 1: Now / In City */}
+            <button
+              type="button"
+              onClick={() => setTripType('city')}
+              className={`p-4 sm:p-5 rounded-3xl border-2 text-left transition-all relative overflow-hidden group cursor-pointer ${
+                tripType === 'city'
+                  ? 'border-brand-600 bg-gradient-to-br from-brand-600 to-sky-700 text-white shadow-lg ring-2 ring-brand-500/30'
+                  : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 shadow-xs'
+              }`}
             >
               <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-sky-100 flex items-center justify-center text-sky-700 font-bold">
-                    <User className="w-7 h-7" />
+                <div>
+                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mb-1.5 ${
+                    tripType === 'city' ? 'bg-white/20 text-yellow-300' : 'bg-sky-100 text-sky-800'
+                  }`}>
+                    <Clock className="w-3 h-3" />
+                    <span>Instant Match (10-15 Min)</span>
                   </div>
-                  <div>
-                    <h3 className="font-extrabold text-navy-900 text-base group-hover:text-brand-600 transition-colors">
-                      1. Driver Now (Hourly Travel)
-                    </h3>
-                    <p className="text-xs text-slate-600 font-medium mt-0.5">
-                      Shopping, hospital visits, weddings & night parties
-                    </p>
-                  </div>
+                  <h3 className="text-xl font-black leading-tight">
+                    Now / In City
+                  </h3>
+                  <p className={`text-xs mt-1 ${tripType === 'city' ? 'text-sky-100' : 'text-slate-500'}`}>
+                    Daily hourly bookings for shopping, hospital visits, office & dining in Hyderabad.
+                  </p>
                 </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                  tripType === 'city' ? 'bg-white/20 text-white' : 'bg-sky-50 text-brand-600'
+                }`}>
+                  <Car className="w-5 h-5" />
+                </div>
               </div>
 
-              <div className="mt-4 pt-2 flex flex-wrap items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-white text-cardBlue-text border border-blue-200 shadow-xs">
-                  <Clock className="w-3 h-3 text-sky-600" />
-                  4 Hours (₹499)
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-white text-cardBlue-text border border-blue-200 shadow-xs">
-                  8 Hours (₹899)
-                </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-white text-cardBlue-text border border-blue-200 shadow-xs">
-                  12 Hours (₹1,299)
+              <div className={`mt-4 pt-3 flex items-center justify-between border-t ${
+                tripType === 'city' ? 'border-white/20' : 'border-slate-100'
+              }`}>
+                <div className="text-xs">
+                  <span className={`font-black text-sm ${tripType === 'city' ? 'text-amber-300' : 'text-brand-700'}`}>
+                    ₹200/hr
+                  </span>
+                  <span className={`text-[10px] ml-1 ${tripType === 'city' ? 'text-sky-200' : 'text-slate-400'}`}>
+                    (Min 2 hrs = ₹400)
+                  </span>
+                </div>
+                <span className={`text-[11px] font-extrabold flex items-center gap-1 ${
+                  tripType === 'city' ? 'text-white' : 'text-brand-600'
+                }`}>
+                  <span>Select</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </span>
               </div>
-            </div>
+            </button>
 
-            {/* 2. HOURS & DAY (Light Mint Green) */}
-            <div
-              onClick={() => handleSelectCategory('Outstation Driver')}
-              className="bg-cardGreen-bg border border-cardGreen-border rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all cursor-pointer relative flex flex-col justify-between group"
+            {/* Option 2: For Later / OutStation */}
+            <button
+              type="button"
+              onClick={() => setTripType('outstation')}
+              className={`p-4 sm:p-5 rounded-3xl border-2 text-left transition-all relative overflow-hidden group cursor-pointer ${
+                tripType === 'outstation'
+                  ? 'border-indigo-600 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white shadow-lg ring-2 ring-indigo-500/30'
+                  : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 shadow-xs'
+              }`}
             >
               <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700">
-                    <Calendar className="w-7 h-7" />
+                <div>
+                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mb-1.5 ${
+                    tripType === 'outstation' ? 'bg-white/20 text-amber-300' : 'bg-indigo-100 text-indigo-800'
+                  }`}>
+                    <Calendar className="w-3 h-3" />
+                    <span>Advance Outstation</span>
                   </div>
-                  <div>
-                    <h3 className="font-extrabold text-navy-900 text-base group-hover:text-emerald-700 transition-colors">
-                      2. Hours & Day (Scheduled & Outstation)
-                    </h3>
-                    <p className="text-xs text-slate-600 font-medium mt-0.5">
-                      Vijayawada, Srisailam, Tirupati, Warangal trips
-                    </p>
-                  </div>
+                  <h3 className="text-xl font-black leading-tight">
+                    For Later / OutStation
+                  </h3>
+                  <p className={`text-xs mt-1 ${tripType === 'outstation' ? 'text-slate-300' : 'text-slate-500'}`}>
+                    Highway trips to Vijayawada, Srisailam, Warangal, Tirupati with experienced drivers.
+                  </p>
                 </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                  tripType === 'outstation' ? 'bg-white/20 text-amber-300' : 'bg-indigo-50 text-indigo-600'
+                }`}>
+                  <MapPin className="w-5 h-5" />
+                </div>
               </div>
 
-              <div className="mt-4 pt-2 flex flex-wrap items-center gap-1.5">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white text-cardGreen-text border border-emerald-200 shadow-xs">
-                  <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                  ₹1,499/day + allowance • Round trip & One-way
+              <div className={`mt-4 pt-3 flex items-center justify-between border-t ${
+                tripType === 'outstation' ? 'border-white/20' : 'border-slate-100'
+              }`}>
+                <div className="text-xs">
+                  <span className={`font-black text-sm ${tripType === 'outstation' ? 'text-amber-400' : 'text-indigo-700'}`}>
+                    ₹1,500/day
+                  </span>
+                  <span className={`text-[10px] ml-1 ${tripType === 'outstation' ? 'text-slate-400' : 'text-slate-400'}`}>
+                    + Driver Allowance
+                  </span>
+                </div>
+                <span className={`text-[11px] font-extrabold flex items-center gap-1 ${
+                  tripType === 'outstation' ? 'text-amber-300' : 'text-indigo-600'
+                }`}>
+                  <span>Select</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </span>
               </div>
-            </div>
-
-            {/* 3. PERMANENT DRIVER (Light Lavender) */}
-            <div
-              onClick={() => handleSelectCategory('Monthly Driver')}
-              className="bg-cardPurple-bg border border-cardPurple-border rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all cursor-pointer relative flex flex-col justify-between group"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-purple-700">
-                    <User className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <h3 className="font-extrabold text-navy-900 text-base group-hover:text-purple-700 transition-colors">
-                      3. Permanent Driver (Monthly Contract)
-                    </h3>
-                    <p className="text-xs text-slate-600 font-medium mt-0.5">
-                      Corporate executives, elderly parents & school drop-offs
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:translate-x-1 transition-transform" />
-              </div>
-
-              <div className="mt-4 pt-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white text-cardPurple-text border border-purple-200 shadow-xs">
-                  Fixed Rate: ₹28,000 / month
-                </span>
-              </div>
-            </div>
-
-            {/* 4. CAR + DRIVER / SELF DRIVE (Light Peach/Orange) */}
-            <div
-              onClick={() => handleSelectCategory('VIP Driver')}
-              className="bg-cardPeach-bg border border-cardPeach-border rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all cursor-pointer relative flex flex-col justify-between group"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-700">
-                    <Car className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <h3 className="font-extrabold text-navy-900 text-base group-hover:text-orange-700 transition-colors">
-                      4. Car + Driver / Self Drive (Luxury Fleet)
-                    </h3>
-                    <p className="text-xs text-slate-600 font-medium mt-0.5">
-                      Premium sedans and SUVs (Audi, BMW, Fortuner, Mercedes)
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:translate-x-1 transition-transform" />
-              </div>
-
-              <div className="mt-4 pt-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white text-cardPeach-text border border-orange-200 shadow-xs">
-                  <Car className="w-3.5 h-3.5 text-orange-600" />
-                  Luxury Sedans & SUVs with Driver
-                </span>
-              </div>
-            </div>
+            </button>
 
           </div>
         </div>
 
-        {/* 5 TRUST & SAFETY BADGES (Section 4.1.3) */}
+        {/* HANDY RIDE PLANNER WIDGET (Blueprint Flow: Locations -> Vehicle -> Estimated Fare -> Submit) */}
+        <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200/90 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-brand-600 block">
+                {tripType === 'city' ? 'Now / In City Flow' : 'For Later / Outstation Flow'}
+              </span>
+              <h2 className="text-lg font-black text-slate-900">
+                {tripType === 'city' ? 'Plan Your City Trip (Hourly)' : 'Plan Your Outstation Journey (Daily)'}
+              </h2>
+            </div>
+            
+            {/* Fare badge */}
+            <div className="px-3 py-1.5 rounded-2xl bg-amber-50 border border-amber-200 self-start sm:self-auto flex items-center gap-1.5">
+              <span className="text-xs font-bold text-amber-900">
+                {tripType === 'city' ? 'Est. ₹200/hr (Min 2 hrs)' : 'Est. ₹1,500/day + Allowance'}
+              </span>
+            </div>
+          </div>
+
+          {/* Locations & Timing Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            {/* Pickup Location with 1-Tap GPS Button */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700">
+                  Pickup Location & Time
+                </label>
+                <button
+                  type="button"
+                  onClick={handleUseGps}
+                  disabled={isGpsLoading}
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[10px] font-black transition-colors cursor-pointer"
+                  title="Detect GPS Location"
+                >
+                  <Navigation className={`w-3 h-3 text-emerald-600 ${isGpsLoading ? 'animate-spin' : ''}`} />
+                  <span>{isGpsLoading ? 'Locating...' : 'Fetch GPS'}</span>
+                </button>
+              </div>
+
+              {gpsSuccessMessage && (
+                <div className="p-1.5 bg-emerald-50 rounded-xl text-[10px] font-extrabold text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  <span>{gpsSuccessMessage}</span>
+                </div>
+              )}
+
+              <LocationSearchInput
+                label="Pickup Address"
+                value={pickupLocation}
+                onChange={setPickupLocation}
+                onSelectLocation={point => {
+                  setPickupCoords({ latitude: point.latitude, longitude: point.longitude });
+                  setPickupLocation(point.address);
+                }}
+                onUseGps={handleUseGps}
+                isGpsLoading={isGpsLoading}
+                dotColor="emerald"
+                showQuickPicks={false}
+                placeholder="Search pickup area, street, landmark..."
+              />
+
+              {/* Time Selector */}
+              {tripType === 'city' ? (
+                <div className="pt-1 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPickupTime('Instant ASAP (Within 15 Mins)')}
+                    className={`flex-1 py-2 px-2.5 rounded-xl text-[11px] font-extrabold border transition-all cursor-pointer truncate ${
+                      pickupTime === 'Instant ASAP (Within 15 Mins)'
+                        ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
+                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    ⚡ Instant (15 Mins)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPickupTime('Today: +1 Hour')}
+                    className={`py-2 px-2.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                      pickupTime === 'Today: +1 Hour'
+                        ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
+                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    +1 Hour
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Start Date</label>
+                    <input
+                      type="date"
+                      value={tripDate}
+                      onChange={e => setTripDate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-xl border border-slate-300 text-xs font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Trip Days</label>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3].map(d => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setOutstationDays(d)}
+                          className={`flex-1 py-1.5 rounded-xl text-xs font-bold border cursor-pointer ${
+                            outstationDays === d
+                              ? 'border-indigo-600 bg-indigo-50 text-indigo-900 font-black'
+                              : 'border-slate-200 bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          {d}d
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Drop Location & Vehicle Details */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 block">
+                {tripType === 'city' ? 'Drop Location' : 'Destination / Outstation City'}
+              </label>
+
+              <LocationSearchInput
+                label="Drop-off Destination"
+                value={dropLocation}
+                onChange={setDropLocation}
+                onSelectLocation={point => {
+                  setDropCoords({ latitude: point.latitude, longitude: point.longitude });
+                  setDropLocation(point.address);
+                }}
+                dotColor="red"
+                showQuickPicks={false}
+                placeholder={tripType === 'city' ? 'Search drop destination...' : 'e.g. Vijayawada, Srisailam, Warangal'}
+              />
+
+              {/* Vehicle Type & Gear Selector */}
+              <div className="pt-1 space-y-1.5">
+                <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+                  <span>Vehicle Type</span>
+                  <span>Transmission</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 flex-1">
+                    {['Hatchback', 'Sedan', 'SUV'].map(vCat => (
+                      <button
+                        key={vCat}
+                        type="button"
+                        onClick={() => setVehicleType(vCat)}
+                        className={`flex-1 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                          vehicleType === vCat
+                            ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
+                            : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {vCat}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {['Manual', 'Automatic'].map(gear => (
+                      <button
+                        key={gear}
+                        type="button"
+                        onClick={() => setTransmission(gear as any)}
+                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                          transmission === gear
+                            ? 'border-brand-600 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20'
+                            : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {gear}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <input
+                  type="text"
+                  value={vehicleModel}
+                  onChange={e => setVehicleModel(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-xs placeholder:text-slate-400"
+                  placeholder="Car Model (Optional: e.g. Swift, City, Creta, Innova)"
+                />
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* Transparent Rate & Submit Button */}
+          <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="text-xs text-slate-600">
+              <span className="font-extrabold text-slate-900 block">
+                {tripType === 'city' ? 'City Hourly Fare: ₹200 / hr' : 'Outstation Fare: ₹1,500 / day'}
+              </span>
+              <span className="text-[11px] text-slate-500">
+                Zero surge pricing • Cash payment directly to driver after ride completion
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSubmitPlanner}
+              className="px-6 py-3 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-md transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>{tripType === 'city' ? 'Recommend Drivers for Hourly Bookings' : 'Recommend Drivers for Outstation'}</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* 5 TRUST & SAFETY BADGES */}
         <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-soft border border-slate-200/80">
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
             
             <div className="flex flex-col items-center p-2 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-1.5 shadow-xs">
-                <ShieldCheck className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-1 shadow-xs">
+                <ShieldCheck className="w-4 h-4 stroke-[2.2]" />
               </div>
-              <span className="text-xs font-black text-slate-900 leading-tight">100% Background Verified</span>
-              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Aadhaar & DL authenticated</span>
+              <span className="text-xs font-black text-slate-900 leading-tight">100% Verified</span>
+              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Aadhaar & DL verified</span>
             </div>
 
             <div className="flex flex-col items-center p-2 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mb-1.5 shadow-xs">
-                <Sparkles className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mb-1 shadow-xs">
+                <Sparkles className="w-4 h-4 stroke-[2.2]" />
               </div>
               <span className="text-xs font-black text-slate-900 leading-tight">Transparent Pricing</span>
-              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Zero surge pricing</span>
+              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Zero surge charges</span>
             </div>
 
             <div className="flex flex-col items-center p-2 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mb-1.5 shadow-xs">
-                <span className="font-mono font-black text-xs">#ID</span>
+              <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mb-1 shadow-xs">
+                <span className="font-mono font-black text-xs">#OTP</span>
               </div>
-              <span className="text-xs font-black text-slate-900 leading-tight">6-Digit Driver Code</span>
-              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Tracking accountability</span>
+              <span className="text-xs font-black text-slate-900 leading-tight">Virtual Pickup OTP</span>
+              <span className="text-[10px] text-slate-500 font-medium mt-0.5">6-Digit 1AB2C3 code</span>
             </div>
 
             <div className="flex flex-col items-center p-2 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center mb-1.5 shadow-xs">
-                <Headphones className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-9 h-9 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center mb-1 shadow-xs">
+                <Phone className="w-4 h-4 stroke-[2.2]" />
               </div>
-              <span className="text-xs font-black text-slate-900 leading-tight">Direct Phone Connection</span>
-              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Direct driver-owner calling</span>
+              <span className="text-xs font-black text-slate-900 leading-tight">Direct Calling</span>
+              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Direct driver phone</span>
             </div>
 
             <div className="col-span-2 sm:col-span-1 flex flex-col items-center p-2 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center mb-1.5 shadow-xs">
-                <Clock className="w-5 h-5 stroke-[2.2]" />
+              <div className="w-9 h-9 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center mb-1 shadow-xs">
+                <Clock className="w-4 h-4 stroke-[2.2]" />
               </div>
-              <span className="text-xs font-black text-slate-900 leading-tight">15-Min Rapid Dispatch</span>
-              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Quick arrival across Hyd</span>
+              <span className="text-xs font-black text-slate-900 leading-tight">15-Min Arrival</span>
+              <span className="text-[10px] text-slate-500 font-medium mt-0.5">Across Hyderabad</span>
             </div>
 
           </div>
         </div>
 
-        {/* NEARBY DRIVERS LIST SECTION WITH REAL-TIME FILTER CHIPS (Section 4.1.4) */}
-        <section className="pt-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        {/* RECOMMENDED DRIVERS SECTION (Blueprint: "Recommend Drivers Who are ready for Daily hourly bookings / outstation") */}
+        <section ref={recommendedSectionRef} id="recommended-drivers" className="pt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
             <div>
-              <h2 className="text-xl font-black text-navy-900">Drivers Near You</h2>
-              <p className="text-xs text-slate-500 font-medium">Verified professional drivers in Hyderabad</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-black text-navy-900">
+                  {tripType === 'city'
+                    ? 'Recommended Drivers (Daily Hourly Bookings)'
+                    : 'Recommended Drivers (Outstation Journeys)'}
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-brand-50 text-brand-700 border border-brand-200">
+                  {displayedDrivers.length} Ready
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium">
+                Rule 4 Fair Rotation • Rule 8 Verified Living Areas across Hyderabad
+              </p>
             </div>
-            <button
-              onClick={() => navigate('/find-drivers')}
+
+            <Link
+              to="/find-drivers"
               className="text-xs font-bold text-brand-600 hover:underline flex items-center gap-1 self-start sm:self-auto"
             >
-              View All ({drivers.length})
-            </button>
+              <span>View All Drivers ({drivers.length})</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
 
-          {/* TRIP INTENT TABS (PDF: Now vs For Later / In-City vs Outstation) */}
-          <div className="grid grid-cols-3 gap-2 p-1.5 bg-slate-200/80 rounded-2xl mb-3">
-            {[
-              { id: 'all', label: 'All Drivers' },
-              { id: 'city', label: 'Now / In-City (Hourly)' },
-              { id: 'outstation', label: 'For Later / Outstation' },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setTripIntent(tab.id as any)}
-                className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all text-center truncate ${
-                  tripIntent === tab.id
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* REAL-TIME FILTER CHIPS (Section 4.1.4) */}
+          {/* FILTER CHIPS */}
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none mb-3">
             {[
-              { id: 'all', label: 'All Drivers' },
+              { id: 'all', label: 'All Recommended' },
               { id: 'top_rated', label: 'Top Rated (4.8+)' },
               { id: 'nearby', label: 'Nearby (<5km)' },
               { id: 'available', label: 'Immediate Available' },
             ].map(chip => (
               <button
                 key={chip.id}
+                type="button"
                 onClick={() => setActiveFilterChip(chip.id as any)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap transition-all shadow-xs ${
+                className={`px-3 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap transition-all shadow-xs cursor-pointer ${
                   activeFilterChip === chip.id
                     ? 'bg-slate-900 text-white shadow-md'
-                    : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
                 }`}
               >
                 {chip.label}
@@ -579,102 +740,130 @@ export const CustomerHome: React.FC<CustomerHomeProps> = ({ userLocation, onRequ
             ))}
           </div>
 
+          {/* DRIVER CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {displayedDrivers.length > 0 ? (
-              displayedDrivers.slice(0, 4).map(driver => (
-                <DriverCard
+              displayedDrivers.map(driver => (
+                <div
                   key={driver.id}
-                  driver={driver}
-                  onSelect={(d) => navigate(`/drivers/${d.id}`)}
-                  onBook={(d) => setSelectedDriverForBooking(d)}
-                />
+                  className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <img
+                        src={driver.photo}
+                        alt={driver.name}
+                        className="w-14 h-14 rounded-2xl object-cover border-2 border-brand-100 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="font-black text-slate-900 text-base truncate">{driver.name}</h3>
+                          {driver.verificationBadge && (
+                            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                          )}
+                        </div>
+
+                        {/* Driver Living Area (Rule 8: Kachiguda, Attapur, Secunderabad, Shamshabad) */}
+                        <div className="flex items-center gap-1 text-xs text-brand-700 font-bold mt-0.5">
+                          <MapPin className="w-3.5 h-3.5 shrink-0 text-brand-600" />
+                          <span className="truncate">Living Area: {driver.livingArea || driver.area || 'Hyderabad'}</span>
+                        </div>
+
+                        {/* Rating & Trips */}
+                        <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                          <span className="flex items-center gap-0.5 text-amber-600 font-black">
+                            <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                            {driver.rating}
+                          </span>
+                          <span>•</span>
+                          <span>{driver.totalTrips} completed trips</span>
+                          <span>•</span>
+                          <span>{driver.experienceYears}y exp</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-700 shrink-0 border border-slate-200">
+                      #{driver.driverCode}
+                    </span>
+                  </div>
+
+                  {/* Pricing & Booking CTA */}
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Starting Rate</span>
+                      <span className="text-lg font-black text-slate-900">
+                        {tripType === 'city' ? `₹${driver.startingPrice || 200}/hr` : '₹1,500/day'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/drivers/${driver.id}`}
+                        className="px-3 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                      >
+                        Profile
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDriverForBooking(driver)}
+                        className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-sm transition-all active:scale-95 cursor-pointer flex items-center gap-1"
+                      >
+                        <Car className="w-3.5 h-3.5" />
+                        <span>Book Driver</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               ))
             ) : (
-              <div className="col-span-full bg-white rounded-3xl p-6 sm:p-8 text-center border border-slate-200 shadow-sm space-y-4">
-                <div className="w-14 h-14 bg-brand-50 text-brand-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
-                  <ShieldCheck className="w-7 h-7" />
+              <div className="col-span-full bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-sm space-y-3">
+                <div className="w-12 h-12 bg-brand-50 text-brand-600 rounded-2xl flex items-center justify-center mx-auto">
+                  <ShieldCheck className="w-6 h-6" />
                 </div>
-                <div className="max-w-md mx-auto">
-                  <h3 className="text-base sm:text-lg font-black text-slate-900">
-                    Verified Driver Partners Launching Across Hyderabad
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                    We are currently onboarding and background-verifying licensed drivers for Jubilee Hills, Banjara Hills, Gachibowli, Madhapur, and Cyberabad.
-                  </p>
-                </div>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                  <Link
-                    to="/driver/register"
-                    className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-2"
-                  >
-                    <Car className="w-4 h-4 text-amber-400" />
-                    <span>Drive With Us (Partner Register)</span>
-                  </Link>
-                  <a
-                    href="tel:+918500274288"
-                    className="w-full sm:w-auto px-5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2"
-                  >
-                    <Phone className="w-4 h-4 text-emerald-600" />
-                    <span>24/7 Helpline: +91 85002 74288</span>
-                  </a>
-                </div>
+                <h3 className="text-base font-black text-slate-900">
+                  No Drivers Matching Current Filter
+                </h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Try switching between "Now / In City" and "For Later / Outstation", or reset the filter chips above.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveFilterChip('all')}
+                  className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold"
+                >
+                  Show All Drivers
+                </button>
               </div>
             )}
           </div>
         </section>
 
-        {/* WEBSITE & PLAY STORE COMPLIANCE FOOTER */}
-        <footer className="mt-12 pt-8 border-t border-slate-200 text-slate-600 space-y-6">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="space-y-1">
-              <img src="/logo.png" alt="Localdrivers Hyderabad" className="h-9 object-contain" />
-              <p className="text-xs text-slate-500 max-w-sm">
-                Hyderabad's trusted on-demand driver booking platform. Your Driver. Your Journey.
-              </p>
-              <div className="text-[11px] font-mono text-slate-500 space-y-0.5">
-                <p>
-                  24/7 Helpline: <a href="tel:+918500274288" className="font-bold text-emerald-600 hover:underline">+91 85002 74288</a>
-                </p>
-                <p>
-                  Support: <a href="mailto:localdrivers.in@gmail.com" className="font-bold text-brand-600 hover:underline">localdrivers.in@gmail.com</a>
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-2 gap-x-6 text-xs font-bold text-slate-700">
-              <Link to="/about" className="hover:text-brand-600 transition-colors">About Us</Link>
-              <Link to="/contact" className="hover:text-brand-600 transition-colors">Contact Support</Link>
-              <Link to="/privacy" className="hover:text-brand-600 transition-colors">Privacy Policy</Link>
-              <Link to="/terms" className="hover:text-brand-600 transition-colors">Terms of Service</Link>
-              <Link to="/cancellation" className="hover:text-brand-600 transition-colors">Cancellation Policy</Link>
-              <Link to="/data-deletion" className="hover:text-red-600 transition-colors">Data Deletion</Link>
-              <Link to="/admin/login" className="hover:text-purple-600 transition-colors flex items-center gap-1">Admin Portal</Link>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 gap-2">
-            <span>© 2026 Localdrivers (localdrivers.in). All rights reserved.</span>
-            <span>Jubilee Hills, Hyderabad, Telangana 500033</span>
-          </div>
-        </footer>
-
       </div>
 
-      {/* BOOKING MODAL */}
+      {/* AUTHORITATIVE STREAMLINED BOOKING MODAL */}
       {selectedDriverForBooking && (
         <BookingModal
           driver={selectedDriverForBooking}
-          preselectedService={preselectedService}
+          preselectedService={tripType === 'outstation' ? 'Outstation Driver' : 'City Driver'}
           initialUserLocation={userLocation}
-          onClose={() => {
+          initialPickup={pickupLocation}
+          initialDrop={dropLocation}
+          initialPickupCoords={pickupCoords}
+          initialDropCoords={dropCoords}
+          initialVehicleType={vehicleType}
+          initialTransmission={transmission}
+          initialVehicleModel={vehicleModel}
+          initialDate={tripDate}
+          initialTime={pickupTime}
+          onClose={() => setSelectedDriverForBooking(null)}
+          onBookingComplete={(booking) => {
             setSelectedDriverForBooking(null);
-            setPreselectedService(undefined);
+            navigate(`/bookings/${booking.id}`);
           }}
-          onBookingComplete={(b) => console.log('Booking completed:', b)}
         />
       )}
+
     </div>
   );
 };
-
-export default CustomerHome;
